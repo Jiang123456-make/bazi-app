@@ -1,0 +1,58 @@
+# ---- 系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/
+*.code-workspace
+
+# ---- WorkBuddy 工作数据（本地） ----
+.workbuddy/
+
+# ---- Node / 前端 ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+*.local
+
+# ---- 环境变量 ----
+.env
+.env.*
+!.env.example
+
+# ---- Python（如后续用工具脚本）----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- 移动端 ----
+# iOS
+ios/Pods/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+DerivedData/
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+local.properties
+*.keystore
+!debug.keystore
+# Flutter / React Native
+.dart_tool/
+.flutter-plugins*
+*.jks
+
+# ---- 日志与临时文件 ----
+*.log
+tmp/
+temp/
