@@ -56,3 +56,15 @@ local.properties
 *.log
 tmp/
 temp/
+
+# ---- 签名证书（绝对禁止提交）----
+certs/
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.key
+*.csr
+fastlane/.env
+fastlane/README.md
+BaziApp/certs/

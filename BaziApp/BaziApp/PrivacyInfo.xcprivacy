@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App 隐私清单（Privacy Manifest），iOS 17+ 上架必需 -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<!-- 收集的数据类型：本 App 为离线排盘，不收集、不追踪任何用户数据 -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<!-- 访问的 API 及原因（本 App 未使用需申报的系统 API） -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

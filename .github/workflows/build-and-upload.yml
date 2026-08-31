@@ -1,0 +1,87 @@
+# 灵犀八字 App —— 云构建 + 自动上传 TestFlight
+# 触发方式：GitHub 仓库 → Actions → 左侧 "Build & Upload to TestFlight" → Run workflow
+# 说明：云端 macOS 编译 + 签名 + 归档 + 上传 App Store Connect，全程无需本地 Mac。
+
+name: Build & Upload to TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（CFBundleShortVersionString，如 1.0.0）'
+        required: true
+        default: '1.0.0'
+      build_number:
+        description: '构建号（CFBundleVersion，整数递增，如 1）'
+        required: true
+        default: '1'
+
+env:
+  # 这些变量从仓库 Secrets 读取，见 docs/云构建上架.md
+  TEAM_ID: ${{ secrets.TEAM_ID }}
+  PROFILE_NAME: ${{ secrets.PROFILE_NAME }}
+  APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+  APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+
+jobs:
+  build-and-upload:
+    name: Build & Upload
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        working-directory: BaziApp
+        run: xcodegen generate
+
+      # ---- 签名证书 ----
+      - name: 解码分发证书 (.p12)
+        run: echo "${{ secrets.P12_BASE64 }}" | base64 --decode > distribution.p12
+
+      - name: 创建临时钥匙串并导入证书
+        run: |
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import distribution.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          security default-keychain -s build.keychain
+          security list-keychains -d user -s build.keychain login.keychain
+
+      - name: 解码并安装描述文件 (.mobileprovision)
+        run: |
+          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > profile.mobileprovision
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< "$(security cms -D -i profile.mobileprovision)")
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "已安装描述文件: $PROFILE_UUID"
+
+      # ---- 解码 App Store Connect API Key (.p8) ----
+      - name: 准备 App Store Connect API Key
+        run: echo "${{ secrets.APPSTORE_API_KEY_BASE64 }}" | base64 --decode > BaziApp/api_key.p8
+
+      # ---- 构建 + 签名 + 归档 + 上传 ----
+      - name: 安装 Fastlane 依赖
+        working-directory: BaziApp
+        run: bundle install
+
+      - name: 构建并上传 TestFlight
+        working-directory: BaziApp
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          BUILD_NUMBER: ${{ github.event.inputs.build_number }}
+        run: bundle exec fastlane beta
+
+      - name: 上传构建产物作为 Artifact（备用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaziApp-ipa
+          path: BaziApp/build/*.ipa
+          retention-days: 7

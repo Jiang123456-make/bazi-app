@@ -1,0 +1,37 @@
+# 灵犀八字 —— Fastlane 配置
+# 用于 GitHub Actions 云端构建：签名 + 归档 + 上传 TestFlight
+
+default_platform(:ios)
+
+platform :ios do
+  desc "构建 + 签名 + 上传 TestFlight"
+  lane :beta do
+    # 1) 编译、签名、归档并导出 .ipa
+    build_app(
+      project: "BaziApp.xcodeproj",
+      scheme: "BaziApp",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build",
+      output_name: "BaziApp.ipa",
+      clean: true,
+      skip_profile_detection: true,
+      xcargs: [
+        "CODE_SIGN_STYLE=Manual",
+        "CODE_SIGN_IDENTITY=Apple Distribution",
+        "DEVELOPMENT_TEAM=#{ENV['TEAM_ID']}",
+        "PROVISIONING_PROFILE_SPECIFIER=#{ENV['PROFILE_NAME']}",
+        "MARKETING_VERSION=#{ENV['VERSION']}",
+        "CURRENT_PROJECT_VERSION=#{ENV['BUILD_NUMBER']}"
+      ].join(" ")
+    )
+
+    # 2) 用 App Store Connect API Key 上传到 TestFlight
+    upload_to_testflight(
+      api_key_path: "api_key.p8",
+      api_key_id: ENV['APPSTORE_KEY_ID'],
+      api_issuer: ENV['APPSTORE_ISSUER_ID'],
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
