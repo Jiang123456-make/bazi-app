@@ -1,0 +1,31 @@
+# Codemagic 云构建配置（原生 SwiftUI，无需 Mac，自动签名）
+# 用法：连到 GitHub 仓库后，Codemagic 会自动读取本文件。
+# 用户只需在 Codemagic 里：①连接仓库 ②配 App Store Connect API Key ③点构建。
+
+workflows:
+  lingxi-ios:
+    name: 灵犀八字 iOS 构建
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.lingxi.bazi
+      xcode: latest
+    scripts:
+      - name: 安装 XcodeGen 并生成工程
+        script: |
+          brew install xcodegen
+          cd BaziApp && xcodegen generate
+      - name: 构建并签名 IPA（Codemagic 自动处理证书/描述文件）
+        script: |
+          cd BaziApp
+          xcode-project build-ipa --project BaziApp.xcodeproj --scheme BaziApp
+    artifacts:
+      - BaziApp/build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
