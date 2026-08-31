@@ -46,18 +46,19 @@ jobs:
 
       - name: 创建临时钥匙串并导入证书
         run: |
-          security create-keychain -p "" build.keychain
-          security set-keychain-settings -lut 21600 build.keychain
-          security unlock-keychain -p "" build.keychain
-          security import distribution.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
-          security default-keychain -s build.keychain
-          security list-keychains -d user -s build.keychain login.keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import distribution.p12 -k "$KEYCHAIN_PATH" -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
       - name: 解码并安装描述文件 (.mobileprovision)
         run: |
           echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > profile.mobileprovision
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< "$(security cms -D -i profile.mobileprovision)")
+          security cms -D -i profile.mobileprovision > profile.plist
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" profile.plist)
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
           echo "已安装描述文件: $PROFILE_UUID"
