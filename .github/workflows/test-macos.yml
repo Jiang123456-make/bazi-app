@@ -1,9 +1,0 @@
-name: Test macOS
-on:
-  workflow_dispatch:
-jobs:
-  test:
-    runs-on: macos-latest
-    steps:
-      - name: Echo
-        run: echo "macos runner works"
