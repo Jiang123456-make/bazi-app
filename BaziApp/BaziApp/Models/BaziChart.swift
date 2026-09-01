@@ -32,6 +32,14 @@ struct DaYun: Codable, Hashable {
     let startAge: Int
     /// 结束年龄（如 36）
     let endAge: Int
+    /// 起运公历年份
+    let startYear: Int
+    /// 结束公历年份
+    let endYear: Int
+    /// 大运纳音（如 泉中水）
+    let naYin: String
+    /// 该大运对应的流年列表（起运后 10 年）
+    let liunian: [LiuNian]
 }
 
 /// 流年
@@ -60,6 +68,29 @@ struct BaziChart: Codable, Hashable {
     var trueSolarTime: String
     /// 经度时差（分钟，如 -14）
     var longitudeOffset: Int
+
+    // MARK: - 基本信息（问真式）
+
+    /// 生肖（如 马）
+    var shengxiao: String
+    /// 星座（如 金牛座）
+    var xingzuo: String
+    /// 农历日期（如 庚午年 四月十一）
+    var lunarDate: String
+    /// 节气详情（如 立夏后第 9 天）
+    var jieQiDetail: String
+    /// 胎元（如 壬子·桑柘木）
+    var taiYuan: String
+    /// 命宫（如 辛酉）
+    var mingGong: String
+    /// 身宫（如 乙未）
+    var shenGong: String
+    /// 命卦（如 乾卦 · 西四命）
+    var mingGua: String
+    /// 星宿（如 胃宿）
+    var xingXiu: String
+    /// 起运详述（如 7 年 8 个月起运）
+    var qiYunDetail: String
 
     /// 四柱（年/月/日/时）
     var pillars: [Pillar]

@@ -109,7 +109,7 @@ struct ReportView: View {
 
     /// 本地兜底文案（AI 不可用时展示）
     private func fallbackAI(_ c: BaziChart) -> String {
-        "\(c.dayMaster)日主，\(c.strength)。\(c.pattern)格，聪明且善于理财，适合文化创意、口才相关事业。当前大运\(c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : "")，事业稳步上升。性格刚毅重情，但需注意脾气控制。"
+        "\(c.dayMaster)日主，\(c.strength)。\(c.pattern)，聪明且善于理财，适合文化创意、口才相关事业。当前大运\(c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : "")，事业稳步上升。性格刚毅重情，但需注意脾气控制。"
     }
 
     // MARK: - 4 维度卡

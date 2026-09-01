@@ -177,19 +177,31 @@ enum BaziCalculator {
         let direction = shun ? "顺排" : "逆排"
 
         let mpIndex = liushiJiazi.firstIndex(of: monthPillar)!
+        let dayGan = dayMasterGan(year: year, month: month, day: day)
 
         // 起运年龄 = 出生到最近节的天数 ÷ 3（简化：按日估算）
-        // MVP：简化起运年龄为固定估算（精确需节气分钟级）
         let startAge = estimateStartAge(year: year, month: month, day: day, shun: shun)
 
         var list: [DaYun] = []
         for step in 0..<8 {
             let offset = shun ? (step + 1) : -(step + 1)
             let gz = liushiJiazi[(mpIndex + offset + 60) % 60]
-            let dayGan = dayMasterGan(year: year, month: month, day: day)
             let ss = ShiShen.of(dayGan: dayGan, targetGan: String(gz.first!))
             let age = startAge + step * 10
-            list.append(DaYun(ganzhi: gz, shiShen: ss, startAge: age, endAge: age + 9))
+            let startYear = year + age
+            let endYear = startYear + 9
+            let ny = NaYin.map[gz] ?? ""
+            // 该大运对应的 10 年流年（问真式专业细盘）
+            var lns: [LiuNian] = []
+            for i in 0..<10 {
+                let ly = startYear + i
+                let gzIdx = (ly - 4) % 60
+                let lgz = liushiJiazi[(gzIdx + 60) % 60]
+                let lss = ShiShen.of(dayGan: dayGan, targetGan: String(lgz.first!))
+                lns.append(LiuNian(year: ly, ganzhi: lgz, shiShen: lss))
+            }
+            list.append(DaYun(ganzhi: gz, shiShen: ss, startAge: age, endAge: age + 9,
+                              startYear: startYear, endYear: endYear, naYin: ny, liunian: lns))
         }
 
         return (direction, "起运 \(startAge) 岁", list)
@@ -379,6 +391,118 @@ enum BaziCalculator {
         }
     }
 
+    // MARK: - 胎元 / 命宫 / 身宫 / 命卦 / 星宿（问真式基本信息）
+
+    /// 胎元：月柱天干进一位 + 月柱地支进三位（怀胎十月之月）
+    static func taiYuan(monthPillar: String) -> String {
+        let gan = String(monthPillar.first!)
+        let zhi = String(monthPillar.last!)
+        let ganIdx = Gan.all.firstIndex(of: gan) ?? 0
+        let zhiIdx = Zhi.all.firstIndex(of: zhi) ?? 0
+        let tGan = Gan.all[(ganIdx + 1) % 10]
+        let tZhi = Zhi.all[(zhiIdx + 3) % 12]
+        return tGan + tZhi
+    }
+
+    /// 命宫：正月=子逆数至生月，再从生时顺数至卯（已验证：1998 五月初... 命宫酉；2026-08-15 命宫亥）
+    static func mingGong(lunarMonth: Int, shichenIndex: Int, yearGan: String) -> String {
+        // 逆数生月：正月子 → Zhi[(13 - n) % 12]
+        let monthZhiIdx = (13 - lunarMonth) % 12
+        // 顺数生时至卯（卯下标 3）
+        let offset = (3 - shichenIndex + 12) % 12
+        let gongZhiIdx = (monthZhiIdx + offset) % 12
+        let gongZhi = Zhi.all[gongZhiIdx]
+        // 命宫天干：年上起月（五虎遁）顺数到命宫地支
+        let yinGan = wuhudun(yearGan: yearGan)
+        let ganOffset = (gongZhiIdx - 2 + 12) % 12
+        let ganIdx = (Gan.all.firstIndex(of: yinGan)! + ganOffset) % 10
+        return Gan.all[ganIdx] + gongZhi
+    }
+
+    /// 身宫：正月=子顺数至生月，再从生时顺数至酉（简化参考实现，流派差异较大）
+    static func shenGong(lunarMonth: Int, shichenIndex: Int, yearGan: String) -> String {
+        // 顺数生月：正月子 → Zhi[(n - 1) % 12]
+        let monthZhiIdx = (lunarMonth - 1) % 12
+        // 顺数生时至酉（酉下标 9）
+        let offset = (9 - shichenIndex + 12) % 12
+        let gongZhiIdx = (monthZhiIdx + offset) % 12
+        let gongZhi = Zhi.all[gongZhiIdx]
+        let yinGan = wuhudun(yearGan: yearGan)
+        let ganOffset = (gongZhiIdx - 2 + 12) % 12
+        let ganIdx = (Gan.all.firstIndex(of: yinGan)! + ganOffset) % 10
+        return Gan.all[ganIdx] + gongZhi
+    }
+
+    /// 命卦（东四命/西四命）：以立春为界的年命推算
+    static func mingGua(year: Int, month: Int, day: Int, gender: String) -> String {
+        // 立春前出生，年命属上一年
+        let lc = lichunDate(year: year)
+        let effectiveYear = (month < lc.month || (month == lc.month && day < lc.day)) ? year - 1 : year
+        let yy = effectiveYear % 100
+        var digit = (yy / 10 + yy % 10) % 9
+        if digit == 0 { digit = 9 }
+        var num: Int
+        if gender == "男" {
+            num = 11 - digit
+        } else {
+            num = digit + 4
+        }
+        if num > 9 { num -= 9 }
+        if num == 5 { num = (gender == "男") ? 2 : 8 } // 中宫：男寄坤，女寄艮
+        let guaNames: [Int: String] = [1: "坎", 2: "坤", 3: "震", 4: "巽", 6: "乾", 7: "兑", 8: "艮", 9: "离"]
+        let gua = guaNames[num] ?? ""
+        let eastWest = [1, 3, 4, 9].contains(num) ? "东四命" : "西四命"
+        return "\(gua)卦 · \(eastWest)"
+    }
+
+    /// 星宿：命宫地支对应的二十八宿主宿（传统十二宫配宿）
+    static func xingXiu(mingGongZhi: String) -> String {
+        let map: [String: String] = [
+            "子": "虚宿", "丑": "斗宿", "寅": "箕宿", "卯": "房宿", "辰": "角宿", "巳": "翼宿",
+            "午": "星宿", "未": "井宿", "申": "参宿", "酉": "胃宿", "戌": "娄宿", "亥": "壁宿"
+        ]
+        return map[mingGongZhi] ?? ""
+    }
+
+    // MARK: - 节气详情 / 格局
+
+    /// 节气详情（如「立夏后第 9 天」）
+    static func jieQiDetail(year: Int, month: Int, day: Int) -> String {
+        let jieNames = ["立春", "惊蛰", "清明", "立夏", "芒种", "小暑", "立秋", "白露", "寒露", "立冬", "大雪", "小寒"]
+        let mm = month >= 2 ? month : month + 12
+        var prevIdx = -1
+        for (i, jq) in jieQiDates.enumerated() {
+            let jmm = jq.month >= 2 ? jq.month : jq.month + 12
+            if mm > jmm || (mm == jmm && day >= jq.day) { prevIdx = i }
+        }
+        // 1 月 6 日（小寒）之前 → 属上一年大雪后
+        if prevIdx == -1 {
+            let jd1 = julianDay(year: year - 1, month: 12, day: 7)
+            let jd2 = julianDay(year: year, month: month, day: day)
+            return "大雪后第 \(jd2 - jd1) 天"
+        }
+        let name = jieNames[prevIdx]
+        let jq = jieQiDates[prevIdx]
+        let jqYear = (jq.month == 1) ? year : year
+        let jd1 = julianDay(year: jqYear, month: jq.month, day: jq.day)
+        let jd2 = julianDay(year: year, month: month, day: day)
+        let diff = jd2 - jd1
+        return diff == 0 ? "\(name)当天" : "\(name)后第 \(diff) 天"
+    }
+
+    /// 格局：按月令（月支）藏干取格（月令本气/中气/余气，取非比劫者）
+    static func pattern(monthPillar: String, dayGan: String) -> String {
+        let zhi = String(monthPillar.last!)
+        guard let zhiIdx = Zhi.all.firstIndex(of: zhi) else { return "普通格局" }
+        for g in Zhi.cangGan[zhiIdx] {
+            let ss = ShiShen.of(dayGan: dayGan, targetGan: g)
+            if ss != "比肩" && ss != "劫财" {
+                return ss + "格"
+            }
+        }
+        return "建禄格" // 月令为比劫
+    }
+
     // MARK: - 主入口：完整排盘
 
     static func calculate(name: String, gender: String, solarDate: String, hour: String, place: String) -> BaziChart {
@@ -443,7 +567,7 @@ enum BaziCalculator {
         let dayElem = Gan.wuxing[Gan.all.firstIndex(of: dayGan)!]
         let dayMaster = dayGan + dayElem
         let strength = wuxing[dayElem]! >= 3 ? "身旺" : "身弱"
-        let pattern = "食神生财" // MVP 简化格局（可后续按月令透干细化）
+        let pattern = self.pattern(monthPillar: mp, dayGan: dayGan)
 
         // 神煞
         let ss = shenSha(dayPillar: dp, yearPillar: yp, monthPillar: mp, hourPillar: hp)
@@ -466,9 +590,28 @@ enum BaziCalculator {
             if age >= d.startAge && age <= d.endAge { curDyIndex = i }
         }
 
+        // MARK: 问真式基本信息（生肖/星座/农历/节气/胎元/命宫/身宫/命卦/星宿）
+        let shengxiao = LunarCalendar.shengXiao(yearPillar: yp)
+        let xingzuo = LunarCalendar.xingZuo(month: month, day: day)
+        let lunar = LunarCalendar.solarToLunar(year: year, month: month, day: day)
+        let lunarDate = LunarCalendar.lunarString(solarYear: year, month: month, day: day, ganzhiYear: yp)
+        let jieQiDetailStr = jieQiDetail(year: year, month: month, day: day)
+        let taiYuanStr = taiYuan(monthPillar: mp)
+        let taiYuanFull = "\(taiYuanStr)·\(NaYin.map[taiYuanStr] ?? "")"
+        let yearGan = String(yp.first!)
+        let shichenIdx = hourZhiIndex(hour: trueHour, minute: trueMinute)
+        let mingGongStr = mingGong(lunarMonth: lunar.month, shichenIndex: shichenIdx, yearGan: yearGan)
+        let shenGongStr = shenGong(lunarMonth: lunar.month, shichenIndex: shichenIdx, yearGan: yearGan)
+        let mingGuaStr = mingGua(year: year, month: month, day: day, gender: gender)
+        let xingXiuStr = xingXiu(mingGongZhi: String(mingGongStr.last!))
+
         return BaziChart(
             name: name, gender: gender, solarDate: solarDate, hour: hour, place: place,
             trueSolarTime: trueSolarTime, longitudeOffset: lonOffset,
+            shengxiao: shengxiao, xingzuo: xingzuo, lunarDate: lunarDate,
+            jieQiDetail: jieQiDetailStr, taiYuan: taiYuanFull, mingGong: mingGongStr,
+            shenGong: shenGongStr, mingGua: mingGuaStr, xingXiu: xingXiuStr,
+            qiYunDetail: dy.start,
             pillars: pillars, dayMaster: dayMaster, strength: strength, pattern: pattern,
             wuxingCount: wuxing, goodShenSha: ss.good, badShenSha: ss.bad,
             xiYong: xiyong, jiShen: jishen,

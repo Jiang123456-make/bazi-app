@@ -44,9 +44,10 @@ struct AiService {
         return [
             "姓名：\(c.name)（\(c.gender)）",
             "八字四柱：\(pillars)",
-            "日主：\(c.dayMaster)，\(c.strength)",
+            "日主：\(c.dayMaster)，\(c.strength)，\(c.pattern)",
             "五行：\(wuxing)",
             "喜用神：\(c.xiYong.joined(separator: "、"))，忌神：\(c.jiShen.joined(separator: "、"))",
+            "生肖：\(c.shengxiao)，胎元：\(c.taiYuan)，命宫：\(c.mingGong)",
             "当前大运：\(dayun)"
         ].joined(separator: "；")
     }

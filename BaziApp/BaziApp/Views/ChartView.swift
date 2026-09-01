@@ -1,115 +1,84 @@
 import SwiftUI
 
-/// 屏 2：排盘·结果（问真八字风格完整排盘）
+/// 屏 2：排盘·结果（问真八字风格完整命盘：基本信息 + 基本命盘 + 专业细盘）
 struct ChartView: View {
     let chart: BaziChart
 
+    private let pillarNames = ["年柱", "月柱", "日柱", "时柱"]
+    private let gongWei = ["祖上", "父母", "自己", "子女"]
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // 标题
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("命盘")
-                        .font(BaziTheme.largeTitle())
-                        .foregroundStyle(BaziTheme.ink)
-                    Text("\(chart.name) · \(chart.gender) · \(chart.pillars.map(\.ganzhi).joined(separator: " "))")
-                        .font(BaziTheme.footnote(15))
-                        .foregroundStyle(BaziTheme.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
+            VStack(spacing: 16) {
+                header
 
-                // 命盘图（方形）
-                mingPanCard
+                // ① 基本信息
+                basicInfoCard
 
-                // 四柱卡
-                pillarsCard
+                // ② 基本命盘（四柱大表格）
+                mingPanTable
 
-                // 神煞卡
-                shenShaCard
-
-                // 五行卡
+                // ③ 五行结构
                 wuxingCard
 
-                // 喜用神卡
+                // ④ 喜用神 / 忌神
                 xiYongCard
 
-                // 十神统计卡
-                shiShenCard
+                // ⑤ 神煞
+                shenShaCard
 
-                // 节气卡
-                jieQiCard
-
-                // 近期流年卡
-                liuNianCard
-
-                // 大运卡
+                // ⑥ 专业细盘：大运 + 流年对照
                 daYunCard
 
-                Spacer().frame(height: 20)
+                // ⑦ 近期流年
+                liuNianCard
+
+                Spacer().frame(height: 12)
             }
         }
         .background(BaziTheme.canvas)
     }
 
-    // MARK: - 命盘图（方形：上/左右下中）
+    // MARK: - 头部
 
-    private var mingPanCard: some View {
-        VStack(spacing: 16) {
-            Text("命盘").font(.system(size: 13, weight: .semibold)).foregroundStyle(BaziTheme.ink).kerning(1.2)
-            // 年柱（上）
-            pillarBlock(label: "年柱", pillar: chart.pillars[0])
-            // 中行：月柱 + 日主 + 日柱
-            HStack(spacing: 24) {
-                pillarBlock(label: "月柱", pillar: chart.pillars[1])
-                // 日主高亮
-                VStack(spacing: 2) {
-                    Text("日主").font(.system(size: 10)).foregroundStyle(BaziTheme.actionBlue).kerning(1)
-                    Text(String(chart.pillars[2].gan))
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(BaziTheme.actionBlue)
-                }
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(BaziTheme.dayPillarBG)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                pillarBlock(label: "日柱", pillar: chart.pillars[2])
-            }
-            // 时柱（下）
-            pillarBlock(label: "时柱", pillar: chart.pillars[3])
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("命盘")
+                .font(BaziTheme.largeTitle())
+                .foregroundStyle(BaziTheme.ink)
+            Text("\(chart.gender == "男" ? "乾造" : "坤造") · \(chart.name) · \(chart.pillars.map(\.ganzhi).joined(separator: " "))")
+                .font(BaziTheme.footnote(15))
+                .foregroundStyle(BaziTheme.secondary)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .baziCard()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
+        .padding(.top, 24)
     }
 
-    private func pillarBlock(label: String, pillar: Pillar) -> some View {
-        VStack(spacing: 4) {
-            Text(label).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
-            Text(pillar.ganzhi).font(.system(size: 22, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-            HStack(spacing: 4) {
-                Text(pillar.gan).font(.system(size: 12)).foregroundStyle(BaziTheme.wuxingColor(ganWuxing(pillar.gan)))
-                Text(pillar.zhi).font(.system(size: 12)).foregroundStyle(BaziTheme.wuxingColor(zhiWuxing(pillar.zhi)))
-            }
-        }
-    }
+    // MARK: - ① 基本信息
 
-    // MARK: - 四柱卡
-
-    private var pillarsCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private var basicInfoCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("四柱").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+                Text("基本信息").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                 Spacer()
-                Text("日主 · \(chart.dayMaster)").font(.system(size: 13)).foregroundStyle(BaziTheme.actionBlue)
+                Text("真太阳时 \(chart.trueSolarTime)").font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
             }
-            HStack(alignment: .top, spacing: 8) {
-                ForEach(0..<4, id: \.self) { i in
-                    let isDay = i == 2
-                    pillarDetail(pillar: chart.pillars[i], isDay: isDay)
-                }
-            }
+
+            infoGrid([
+                ("公历", "\(chart.solarDate) \(chart.hour)"),
+                ("农历", chart.lunarDate),
+                ("生肖", chart.shengxiao),
+                ("星座", chart.xingzuo),
+                ("节气", chart.jieQiDetail),
+                ("星宿", chart.xingXiu),
+                ("胎元", chart.taiYuan),
+                ("命宫", chart.mingGong),
+                ("身宫", chart.shenGong),
+                ("命卦", chart.mingGua),
+                ("起运", chart.qiYunDetail),
+                ("空亡", chart.pillars[2].kongWang)
+            ])
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,68 +86,128 @@ struct ChartView: View {
         .padding(.horizontal, 20)
     }
 
-    private func pillarDetail(pillar: Pillar, isDay: Bool) -> some View {
-        VStack(spacing: 4) {
-            Text(pillar.gan)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(isDay ? BaziTheme.actionBlue : BaziTheme.wuxingColor(ganWuxing(pillar.gan)))
-            Text(pillar.zhi)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(isDay ? BaziTheme.actionBlue : BaziTheme.wuxingColor(zhiWuxing(pillar.zhi)))
-            Text(pillar.shiShen).font(.system(size: 12, weight: isDay ? .semibold : .regular)).foregroundStyle(isDay ? BaziTheme.actionBlue : BaziTheme.secondary)
-            Text(pillar.cangGan.joined()).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
-            Text(pillar.naYin).font(.system(size: 10)).foregroundStyle(BaziTheme.placeholder)
-            Text(pillar.xingYun).font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
-            Text("空亡 \(pillar.kongWang)").font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+    private func infoGrid(_ items: [(String, String)]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
+            ForEach(items, id: \.0) { item in
+                HStack(alignment: .top, spacing: 6) {
+                    Text(item.0).font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                        .frame(width: 36, alignment: .leading)
+                    Text(item.1).font(.system(size: 13, weight: .medium)).foregroundStyle(BaziTheme.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    // MARK: - ② 基本命盘（四柱大表格）
+
+    private var mingPanTable: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("基本命盘").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+                Spacer()
+                Text("\(chart.dayMaster)日主 · \(chart.strength)").font(.system(size: 13)).foregroundStyle(BaziTheme.actionBlue)
+            }
+            .padding(16)
+            .padding(.bottom, 8)
+
+            // 四列并列
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(0..<4, id: \.self) { i in
+                    pillarColumn(chart.pillars[i], index: i, isDay: i == 2)
+                    if i < 3 {
+                        Rectangle().fill(BaziTheme.divider).frame(width: 1)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 16)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .baziCard()
+        .padding(.horizontal, 20)
+    }
+
+    private func pillarColumn(_ p: Pillar, index: Int, isDay: Bool) -> some View {
+        VStack(spacing: 7) {
+            // 柱名 + 宫位
+            Text(pillarNames[index]).font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+            Text(gongWei[index]).font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
+
+            Divider().frame(width: 24)
+
+            // 主星（十神）
+            Text(p.shiShen)
+                .font(.system(size: 12, weight: isDay ? .semibold : .regular))
+                .foregroundStyle(isDay ? BaziTheme.actionBlue : BaziTheme.secondary)
+
+            // 天干
+            Text(p.gan)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(isDay ? BaziTheme.actionBlue : BaziTheme.wuxingColor(ganWuxing(p.gan)))
+            Text(ganWuxing(p.gan))
+                .font(.system(size: 10))
+                .foregroundStyle(BaziTheme.wuxingColor(ganWuxing(p.gan)))
+
+            // 地支
+            Text(p.zhi)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(isDay ? BaziTheme.actionBlue : BaziTheme.wuxingColor(zhiWuxing(p.zhi)))
+            Text(zhiWuxing(p.zhi))
+                .font(.system(size: 10))
+                .foregroundStyle(BaziTheme.wuxingColor(zhiWuxing(p.zhi)))
+
+            // 藏干（每个带十神）
+            VStack(spacing: 3) {
+                ForEach(0..<p.cangGan.count, id: \.self) { j in
+                    HStack(spacing: 3) {
+                        Text(p.cangGan[j]).font(.system(size: 11)).foregroundStyle(BaziTheme.wuxingColor(ganWuxing(p.cangGan[j])))
+                        Text(p.cangGanShiShen[j]).font(.system(size: 10)).foregroundStyle(BaziTheme.secondary)
+                    }
+                }
+            }
+            .frame(minHeight: 42, alignment: .center)
+
+            Divider().frame(width: 24)
+
+            // 星运
+            Text(p.xingYun).font(.system(size: 11)).foregroundStyle(BaziTheme.ink)
+            // 空亡
+            Text(p.kongWang.isEmpty ? "—" : p.kongWang).font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+            // 纳音
+            Text(p.naYin).font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(isDay ? BaziTheme.dayPillarBG : BaziTheme.parchment)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.vertical, 6)
+        .background(isDay ? BaziTheme.dayPillarBG : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    // MARK: - 神煞卡
-
-    private var shenShaCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("神煞").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
-            FlowLayout(spacing: 8) {
-                ForEach(chart.goodShenSha, id: \.self) { s in
-                    chip(s, bg: BaziTheme.shenshaGoodBG, fg: BaziTheme.shenshaGood)
-                }
-                ForEach(chart.badShenSha, id: \.self) { s in
-                    chip(s, bg: BaziTheme.shenshaBadBG, fg: BaziTheme.shenshaBad)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .baziCard()
-        .padding(.horizontal, 20)
-    }
-
-    // MARK: - 五行卡
+    // MARK: - ③ 五行结构
 
     private var wuxingCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("五行强弱").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
-            let maxCount = max(chart.wuxingCount.values.max() ?? 1, 1)
+            Text("五行结构").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+            let total = max(chart.wuxingCount.values.reduce(0, +), 1)
             ForEach(["木", "火", "土", "金", "水"], id: \.self) { elem in
                 let count = chart.wuxingCount[elem] ?? 0
+                let percent = Int(round(Double(count) * 100 / Double(total)))
                 HStack(spacing: 10) {
-                    Text(elem).font(.system(size: 14)).foregroundStyle(BaziTheme.ink).frame(width: 20)
+                    Text(elem).font(.system(size: 14, weight: .medium)).foregroundStyle(BaziTheme.ink).frame(width: 20)
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(BaziTheme.fill).frame(height: 8)
+                            Capsule().fill(BaziTheme.fill).frame(height: 10)
                             Capsule()
                                 .fill(BaziTheme.wuxingColor(elem))
-                                .frame(width: geo.size.width * CGFloat(count) / CGFloat(maxCount), height: 8)
+                                .frame(width: geo.size.width * CGFloat(count) / CGFloat(max(chart.wuxingCount.values.max() ?? 1, 1)), height: 10)
                         }
                     }
-                    .frame(height: 8)
-                    Text("\(count)").font(.system(size: 14)).foregroundStyle(BaziTheme.secondary).frame(width: 16)
+                    .frame(height: 10)
+                    Text("\(count) · \(percent)%").font(.system(size: 12)).foregroundStyle(BaziTheme.secondary).frame(width: 64, alignment: .trailing)
                 }
             }
+            Text("按天干、地支、藏干统计；百分比为该五行占总数的比例")
+                .font(.system(size: 10)).foregroundStyle(BaziTheme.placeholder)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -186,7 +215,7 @@ struct ChartView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - 喜用神卡
+    // MARK: - ④ 喜用神 / 忌神
 
     private var xiYongCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -194,13 +223,14 @@ struct ChartView: View {
             HStack(spacing: 8) {
                 Text("喜用").font(.system(size: 14)).foregroundStyle(BaziTheme.ink).frame(width: 40, alignment: .leading)
                 ForEach(chart.xiYong, id: \.self) { e in
-                    chip(e, bg: BaziTheme.wuxingColor(e).opacity(0.12), fg: BaziTheme.wuxingColor(e))
+                    chip(e, bg: BaziTheme.wuxingColor(e).opacity(0.14), fg: BaziTheme.wuxingColor(e))
                 }
+                Text("· \(chart.pattern)").font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
             }
             HStack(spacing: 8) {
                 Text("忌神").font(.system(size: 14)).foregroundStyle(BaziTheme.ink).frame(width: 40, alignment: .leading)
                 ForEach(chart.jiShen, id: \.self) { e in
-                    chip(e, bg: BaziTheme.wuxingColor(e).opacity(0.12), fg: BaziTheme.wuxingColor(e))
+                    chip(e, bg: BaziTheme.parchment, fg: BaziTheme.secondary)
                 }
             }
         }
@@ -210,15 +240,29 @@ struct ChartView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - 十神统计卡
+    // MARK: - ⑤ 神煞
 
-    private var shiShenCard: some View {
+    private var shenShaCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("十神统计").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
-            let stats = shiShenStats()
-            FlowLayout(spacing: 8) {
-                ForEach(stats.sorted(by: { $0.key < $1.key }), id: \.key) { item in
-                    chip("\(item.key) \(item.value)", bg: BaziTheme.parchment, fg: BaziTheme.secondary)
+            Text("神煞").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+            if !chart.goodShenSha.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    Text("吉").font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.shenshaGood).frame(width: 20, alignment: .leading)
+                    FlowLayout(spacing: 8) {
+                        ForEach(chart.goodShenSha, id: \.self) { s in
+                            chip(s, bg: BaziTheme.shenshaGoodBG, fg: BaziTheme.shenshaGood)
+                        }
+                    }
+                }
+            }
+            if !chart.badShenSha.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    Text("凶").font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.shenshaBad).frame(width: 20, alignment: .leading)
+                    FlowLayout(spacing: 8) {
+                        ForEach(chart.badShenSha, id: \.self) { s in
+                            chip(s, bg: BaziTheme.shenshaBadBG, fg: BaziTheme.shenshaBad)
+                        }
+                    }
                 }
             }
         }
@@ -228,30 +272,63 @@ struct ChartView: View {
         .padding(.horizontal, 20)
     }
 
-    private func shiShenStats() -> [String: Int] {
-        var stats: [String: Int] = [:]
-        for p in chart.pillars {
-            if p.shiShen != "日主" { stats[p.shiShen, default: 0] += 1 }
-            for ss in p.cangGanShiShen { stats[ss, default: 0] += 1 }
-        }
-        return stats
-    }
+    // MARK: - ⑥ 大运 + 流年对照
 
-    // MARK: - 节气卡
-
-    private var jieQiCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("节气").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+    private var daYunCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("出生").font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
-                    Text("立夏后").font(.system(size: 16, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-                }
+                Text("大运").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("真太阳时").font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
-                    Text("\(chart.trueSolarTime)（\(chart.longitudeOffset >= 0 ? "+" : "")\(chart.longitudeOffset)分）").font(.system(size: 16, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                Text("\(chart.dayunDirection) · \(chart.dayunStart)").font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
+            }
+
+            // 大运横向排列
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(chart.dayun.enumerated()), id: \.offset) { idx, dy in
+                        let isCurrent = idx == chart.currentDayunIndex
+                        VStack(spacing: 4) {
+                            Text(dy.ganzhi).font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(isCurrent ? BaziTheme.actionBlue : BaziTheme.ink)
+                            Text(dy.shiShen).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                            Text("\(dy.startAge)-\(dy.endAge)岁").font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
+                            Text(dy.naYin).font(.system(size: 9)).foregroundStyle(BaziTheme.tertiary)
+                        }
+                        .frame(width: 72)
+                        .padding(.vertical, 12)
+                        .background(isCurrent ? BaziTheme.dayPillarBG : BaziTheme.fill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(isCurrent ? BaziTheme.actionBlue : Color.clear, lineWidth: 1.5)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                 }
+            }
+
+            // 当前大运的流年
+            if chart.currentDayunIndex < chart.dayun.count {
+                let cur = chart.dayun[chart.currentDayunIndex]
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(cur.ganzhi) 大运流年（\(cur.startYear)-\(cur.endYear)）")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                    FlowLayout(spacing: 8) {
+                        ForEach(cur.liunian, id: \.year) { ln in
+                            VStack(spacing: 3) {
+                                Text("\(ln.year)").font(.system(size: 10)).foregroundStyle(BaziTheme.secondary)
+                                Text(ln.ganzhi).font(.system(size: 15, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                                Text(ln.shiShen).font(.system(size: 10)).foregroundStyle(BaziTheme.secondary)
+                            }
+                            .frame(width: 60)
+                            .padding(.vertical, 8)
+                            .background(BaziTheme.fill)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                    }
+                }
+                .padding(12)
+                .background(BaziTheme.parchment)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .padding(16)
@@ -260,7 +337,7 @@ struct ChartView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - 近期流年卡
+    // MARK: - ⑦ 近期流年
 
     private var liuNianCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -276,47 +353,6 @@ struct ChartView: View {
                     .padding(.vertical, 10)
                     .background(BaziTheme.fill)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .baziCard()
-        .padding(.horizontal, 20)
-    }
-
-    // MARK: - 大运卡
-
-    private var daYunCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("大运").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
-                Spacer()
-                Text("\(chart.dayunDirection) · \(chart.dayunStart)").font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
-            }
-            // 当前大运
-            if chart.currentDayunIndex < chart.dayun.count {
-                let cur = chart.dayun[chart.currentDayunIndex]
-                HStack {
-                    Text(cur.ganzhi).font(.system(size: 24, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
-                    Spacer()
-                    Text("\(cur.startAge)-\(cur.endAge)岁 · \(cur.shiShen)").font(.system(size: 15, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-                }
-                .padding(14)
-                .background(BaziTheme.dayPillarBG)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            // 后续大运
-            HStack(spacing: 8) {
-                ForEach(chart.dayun, id: \.self) { dy in
-                    VStack(spacing: 4) {
-                        Text(dy.ganzhi).font(.system(size: 15, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-                        Text("\(dy.startAge)-\(dy.endAge)").font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(BaziTheme.fill)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
