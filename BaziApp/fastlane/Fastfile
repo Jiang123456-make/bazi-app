@@ -34,9 +34,11 @@ platform :ios do
 
     # 2) 用 App Store Connect API Key 上传到 TestFlight
     upload_to_testflight(
-      api_key_path: "api_key.p8",
-      api_key_id: ENV['APPSTORE_KEY_ID'],
-      api_issuer: ENV['APPSTORE_ISSUER_ID'],
+      api_key: {
+        key_id: ENV['APPSTORE_KEY_ID'],
+        issuer_id: ENV['APPSTORE_ISSUER_ID'],
+        key_filepath: "api_key.p8"
+      },
       skip_waiting_for_build_processing: true
     )
   end
