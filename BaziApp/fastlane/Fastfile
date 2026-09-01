@@ -37,7 +37,7 @@ platform :ios do
       api_key: {
         key_id: ENV['APPSTORE_KEY_ID'],
         issuer_id: ENV['APPSTORE_ISSUER_ID'],
-        filepath: "api_key.p8"
+        key: File.read("api_key.p8")
       },
       skip_waiting_for_build_processing: true
     )
