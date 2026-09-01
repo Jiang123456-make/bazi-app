@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 屏 4：顾问·对话
+/// 屏 4：顾问·对话（真实 AI 接入，网络异常时回退本地解读）
 struct AdvisorView: View {
     let chart: BaziChart?
 
@@ -8,7 +8,12 @@ struct AdvisorView: View {
     @State private var input = ""
     @State private var isTyping = false
 
-    private let quickQuestions = ["看事业", "看财运", "看感情", "看健康"]
+    private let quickQuestions = [
+        "我的事业发展如何？",
+        "我的财运怎么样？",
+        "感情婚姻如何？",
+        "健康需要注意什么？"
+    ]
 
     var body: some View {
         NavigationStack {
@@ -151,29 +156,55 @@ struct AdvisorView: View {
     private func loadGreeting() {
         guard messages.isEmpty else { return }
         let dm = chart?.dayMaster ?? "庚金"
-        messages.append(Message(text: "您好，我是灵犀。基于您的八字（\(dm)日主），可以为您解读事业、财运、感情与健康。", isAI: true, time: now()))
+        messages.append(Message(text: "您好，我是灵犀。基于您的八字（\(dm)日主），可以为您解读事业、财运、感情与健康，有什么想先了解的吗？", isAI: true, time: now()))
     }
 
     private func ask(_ q: String) {
-        messages.append(Message(text: "帮我\(q)", isAI: false, time: now()))
-        isTyping = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            isTyping = false
-            messages.append(Message(text: answer(q), isAI: true, time: now()))
-        }
+        appendUser(q)
+        requestAI()
     }
 
     private func send() {
         let q = input.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
         input = ""
-        ask(q.replacingOccurrences(of: "帮我", with: "").replacingOccurrences(of: "看", with: "看"))
+        appendUser(q)
+        requestAI()
     }
 
-    private func answer(_ q: String) -> String {
+    private func appendUser(_ text: String) {
+        messages.append(Message(text: text, isAI: false, time: now()))
+    }
+
+    /// 组装完整上下文（系统提示词 + 历史对话）并请求真实 AI
+    private func requestAI() {
+        guard let last = messages.last, !last.isAI else { return }
+        isTyping = true
+
+        var chatMessages: [AiService.ChatMessage] = []
+        chatMessages.append(AiService.ChatMessage(role: "system", content: AiService.buildSystemPrompt(chart: chart)))
+        for m in messages {
+            chatMessages.append(AiService.ChatMessage(role: m.isAI ? "assistant" : "user", content: m.text))
+        }
+
+        let userText = last.text
+        AiService.chat(messages: chatMessages) { result in
+            isTyping = false
+            switch result {
+            case .success(let text):
+                messages.append(Message(text: text, isAI: true, time: now()))
+            case .failure:
+                // 网络异常兜底：用本地解读，保证离线也能给出回应
+                messages.append(Message(text: localAnswer(userText), isAI: true, time: now()))
+            }
+        }
+    }
+
+    /// 本地兜底解读（网络不可用时使用）
+    private func localAnswer(_ q: String) -> String {
         if q.contains("事业") { return "您食神生财，宜从事文化创意、口才表达、教育传媒等方向。当前大运食神主事，事业稳步上升，2028 换大运后有新的机遇。" }
-        if q.contains("财运") { return "正财平稳，中年后渐入佳境。您理财观念较强，但需注意不要因朋友义气破财。" }
-        if q.contains("感情") { return "配偶宫坐食神，晚婚为宜。感情中需多沟通，避免因工作忙碌忽略对方感受。" }
+        if q.contains("财") { return "正财平稳，中年后渐入佳境。您理财观念较强，但需注意不要因朋友义气破财。" }
+        if q.contains("感情") || q.contains("婚姻") { return "配偶宫坐食神，晚婚为宜。感情中需多沟通，避免因工作忙碌忽略对方感受。" }
         if q.contains("健康") { return "金旺需注意呼吸系统与皮肤。建议规律作息，适当运动，秋季尤其注意养肺。" }
         return "这个问题我可以结合您的命盘为您详细解读，您可以具体说说想了解哪方面？"
     }

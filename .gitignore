@@ -68,3 +68,6 @@ certs/
 fastlane/.env
 fastlane/README.md
 BaziApp/certs/
+
+# ---- ASC API 自动化脚本（含 p12 密码等敏感信息，仓库公开，禁止提交）----
+scripts/

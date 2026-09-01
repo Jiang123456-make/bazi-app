@@ -12,9 +12,9 @@ on:
         required: true
         default: '1.0.0'
       build_number:
-        description: '构建号（CFBundleVersion，整数递增，如 1）'
+        description: '构建号（CFBundleVersion，整数递增，如 2）'
         required: true
-        default: '1'
+        default: '2'
 
 env:
   # 这些变量从仓库 Secrets 读取，见 docs/云构建上架.md

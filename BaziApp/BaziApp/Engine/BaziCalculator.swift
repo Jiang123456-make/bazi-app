@@ -144,17 +144,10 @@ enum BaziCalculator {
 
     // MARK: - 真太阳时
 
-    /// 主要城市经度（东经）
-    static let cityLongitude: [String: Double] = [
-        "北京": 116.4, "上海": 121.5, "广州": 113.3, "深圳": 114.1,
-        "成都": 104.1, "重庆": 106.5, "西安": 108.9, "武汉": 114.3,
-        "南京": 118.8, "杭州": 120.2, "天津": 117.2, "乌鲁木齐": 87.6,
-        "拉萨": 91.1, "昆明": 102.7, "哈尔滨": 126.6, "沈阳": 123.4
-    ]
-
     /// 经度时差（分钟）：(经度 - 120°) × 4
+    /// 出生地经度来自 PlaceData（130+ 城市）；未知地区默认经度 120°，时差 0（即北京时间）
     static func longitudeOffset(place: String) -> Int {
-        let lon = cityLongitude[place] ?? 116.4
+        let lon = PlaceData.longitude(of: place)
         return Int(round((lon - 120.0) * 4))
     }
 

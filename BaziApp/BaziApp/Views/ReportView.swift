@@ -4,6 +4,9 @@ import SwiftUI
 struct ReportView: View {
     let chart: BaziChart?
 
+    @State private var aiLoading = false
+    @State private var aiText: String? = nil
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -33,6 +36,27 @@ struct ReportView: View {
                 }
             }
             .background(BaziTheme.canvas)
+            .task(id: chart?.solarDate ?? "") {
+                aiText = nil
+                if let c = chart { loadAI(c) }
+            }
+        }
+    }
+
+    // MARK: - AI 解读（真实 AI 异步加载）
+
+    private func loadAI(_ c: BaziChart) {
+        aiLoading = true
+        let messages: [AiService.ChatMessage] = [
+            AiService.ChatMessage(role: "system", content: AiService.buildSystemPrompt(chart: c)),
+            AiService.ChatMessage(role: "user", content: "请为我的八字命盘做一段综合命理解读（性格、事业、财运、感情、健康），200 字以内，分点清晰。")
+        ]
+        AiService.chat(messages: messages) { result in
+            aiLoading = false
+            switch result {
+            case .success(let text): aiText = text
+            case .failure: aiText = nil   // 保持 nil，卡片显示本地兜底文案
+            }
         }
     }
 
@@ -55,16 +79,37 @@ struct ReportView: View {
 
     private func aiCard(_ c: BaziChart) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("AI 解读").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).kerning(1.2)
-            Text("\(c.dayMaster)日主，\(c.strength)。\(c.pattern)格，聪明且善于理财，适合文化创意、口才相关事业。当前大运\(c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : "")，事业稳步上升。性格刚毅重情，但需注意脾气控制。")
-                .font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
-                .lineSpacing(6)
+            HStack {
+                Text("AI 解读").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).kerning(1.2)
+                Spacer()
+                if aiLoading {
+                    ProgressView().tint(.white)
+                }
+            }
+            if let text = aiText {
+                Text(text)
+                    .font(.system(size: 13)).foregroundStyle(.white)
+                    .lineSpacing(6)
+            } else if aiLoading {
+                Text("灵犀正在结合您的命盘进行解读…")
+                    .font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
+                    .lineSpacing(6)
+            } else {
+                Text(fallbackAI(c))
+                    .font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
+                    .lineSpacing(6)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
         .background(BaziTheme.darkTile)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .padding(.horizontal, 20)
+    }
+
+    /// 本地兜底文案（AI 不可用时展示）
+    private func fallbackAI(_ c: BaziChart) -> String {
+        "\(c.dayMaster)日主，\(c.strength)。\(c.pattern)格，聪明且善于理财，适合文化创意、口才相关事业。当前大运\(c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : "")，事业稳步上升。性格刚毅重情，但需注意脾气控制。"
     }
 
     // MARK: - 4 维度卡
