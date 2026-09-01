@@ -16,6 +16,12 @@ platform :ios do
       output_name: "BaziApp.ipa",
       clean: true,
       skip_profile_detection: true,
+      export_options: {
+        method: "app-store",
+        provisioningProfiles: {
+          "com.lingxi.bazi" => ENV['PROFILE_NAME']
+        }
+      },
       xcargs: [
         "CODE_SIGN_STYLE=Manual",
         "CODE_SIGN_IDENTITY='Apple Distribution'",
