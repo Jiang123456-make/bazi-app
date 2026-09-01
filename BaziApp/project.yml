@@ -31,3 +31,5 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lingxi.bazi
         INFOPLIST_KEY_CFBundleDisplayName: 灵犀
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 无需访问相册
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
