@@ -70,11 +70,12 @@ jobs:
       # ---- 构建 + 签名 + 归档 + 上传 ----
       - name: 安装 Fastlane 依赖
         working-directory: BaziApp
-        run: bundle install
+        run: bundle install --gemfile fastlane/Gemfile
 
       - name: 构建并上传 TestFlight
         working-directory: BaziApp
         env:
+          BUNDLE_GEMFILE: fastlane/Gemfile
           VERSION: ${{ github.event.inputs.version }}
           BUILD_NUMBER: ${{ github.event.inputs.build_number }}
         run: bundle exec fastlane beta
