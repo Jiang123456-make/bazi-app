@@ -74,6 +74,8 @@ enum BaziTheme {
 
     /// 日柱高亮底
     static let dayPillarBG = Color(hex: 0xEAF2FC)
+    /// 行式命盘表：日柱整列底色（更淡，避免抢戏）
+    static let dayColumn = Color(hex: 0x0066CC).opacity(0.07)
 
     // MARK: - 字体
 

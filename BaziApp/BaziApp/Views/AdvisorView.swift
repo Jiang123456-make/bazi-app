@@ -202,10 +202,25 @@ struct AdvisorView: View {
 
     /// 本地兜底解读（网络不可用时使用）
     private func localAnswer(_ q: String) -> String {
-        if q.contains("事业") { return "您食神生财，宜从事文化创意、口才表达、教育传媒等方向。当前大运食神主事，事业稳步上升，2028 换大运后有新的机遇。" }
-        if q.contains("财") { return "正财平稳，中年后渐入佳境。您理财观念较强，但需注意不要因朋友义气破财。" }
-        if q.contains("感情") || q.contains("婚姻") { return "配偶宫坐食神，晚婚为宜。感情中需多沟通，避免因工作忙碌忽略对方感受。" }
-        if q.contains("健康") { return "金旺需注意呼吸系统与皮肤。建议规律作息，适当运动，秋季尤其注意养肺。" }
+        let dm = chart?.dayMaster ?? "庚金"
+        let pattern = chart?.pattern ?? "七杀格"
+        let hourShi = chart?.pillars[3].shiShen ?? "食神"
+        let dayun = (chart?.dayun.indices.contains(chart?.currentDayunIndex ?? 0) ?? false)
+            ? chart?.dayun[chart!.currentDayunIndex].ganzhi ?? "—" : "—"
+
+        if q.contains("事业") {
+            return "您\(dm)日主，\(pattern)，时干\(hourShi)透出——宜以专业能力与表达沟通立身，忌硬碰硬。当前大运\(dayun)，先积累作品与口碑，换运后自有跃迁。"
+        }
+        if q.contains("财") {
+            return "财气看喜用：宜\(chart?.xiYong.joined(separator: "、") ?? "水、木")方向。您的财运偏稳，靠专业复利而非投机，中年后渐入佳境，切忌为朋友义气破财。"
+        }
+        if q.contains("感情") || q.contains("婚姻") {
+            let peiou = chart?.pillars[2].zhi ?? "辰"
+            return "配偶宫坐\(peiou)，\(chart?.strength ?? "身旺")之人择偶宜看重品性与韧性。晚成更稳，感情中多表达、少隐忍，避免因工作忙碌忽略陪伴。"
+        }
+        if q.contains("健康") {
+            return "\(dm)日主，请留意与\(chart?.jiShen.joined(separator: "、") ?? "火、土")过旺相关的脏腑负担。建议规律作息、适度有氧，换季前后做一次体检。"
+        }
         return "这个问题我可以结合您的命盘为您详细解读，您可以具体说说想了解哪方面？"
     }
 }

@@ -16,21 +16,22 @@ struct ProfileView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
 
-                    // 灵犀状态卡
+                    // 灵犀状态卡（浅色，深色块清零）
                     HStack(spacing: 12) {
                         ZStack {
-                            Circle().fill(BaziTheme.actionBlue).frame(width: 40, height: 40)
-                            Text("灵").font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
+                            Circle().fill(BaziTheme.dayColumn).frame(width: 40, height: 40)
+                            Text("灵").font(.system(size: 18, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("灵犀 · AI 命理顾问").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                            Text("在线 · 已为你服务 1000+ 次").font(.system(size: 11)).foregroundStyle(BaziTheme.placeholder)
+                            Text("灵犀 · AI 命理顾问").font(.system(size: 14, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                            Text("在线 · 已为你服务 1000+ 次").font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
                         }
                         Spacer()
-                        Text("问问灵犀 →").font(.system(size: 13, weight: .medium)).foregroundStyle(BaziTheme.blueOnDark)
+                        Text("问问灵犀 →").font(.system(size: 13, weight: .medium)).foregroundStyle(BaziTheme.actionBlue)
                     }
                     .padding(14)
-                    .background(BaziTheme.darkTile)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(BaziTheme.parchment)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .padding(.horizontal, 20)
 
@@ -51,8 +52,10 @@ struct ProfileView: View {
                                 Spacer()
                                 Text("\(score) 分 · \(level)").font(.system(size: 13, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
                             }
+                            summaryRow("日主", value: "\(c.dayMaster) · \(c.strength)")
+                            summaryRow("格局", value: c.pattern)
                             summaryRow("当前大运", value: currentDayun(c))
-                            summaryRow("喜用神", value: c.xiYong.joined(separator: "、"), valueColor: BaziTheme.fire)
+                            summaryRow("喜用神", value: c.xiYong.joined(separator: "、"), valueColor: BaziTheme.actionBlue)
                             summaryRow("下一大运", value: nextDayun(c))
                         }
                         .padding(16)

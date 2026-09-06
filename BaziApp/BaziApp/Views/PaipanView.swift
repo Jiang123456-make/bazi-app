@@ -50,20 +50,21 @@ struct PaipanView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
 
-                    // 灵犀介绍卡
+                    // 灵犀介绍卡（浅色，深色块清零）
                     HStack(spacing: 14) {
                         ZStack {
-                            Circle().fill(BaziTheme.actionBlue).frame(width: 44, height: 44)
-                            Text("灵").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
+                            Circle().fill(BaziTheme.dayColumn).frame(width: 44, height: 44)
+                            Text("灵").font(.system(size: 20, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
                         }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("灵犀").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                            Text("你的 AI 命理顾问 · 阅盘 1000+").font(.system(size: 12)).foregroundStyle(BaziTheme.placeholder)
+                            Text("灵犀").font(.system(size: 16, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                            Text("你的 AI 命理顾问 · 阅盘 1000+").font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                         }
                         Spacer()
                     }
                     .padding(16)
-                    .background(BaziTheme.darkTile)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(BaziTheme.parchment)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .padding(.horizontal, 20)
 
@@ -121,7 +122,7 @@ struct PaipanView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "sun.max")
                             .font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
-                        Text("\(shichenList[shichenIndex].name) \(shichenList[shichenIndex].range) · 排盘时按出生地自动校正真太阳时")
+                        Text(trueSolarHint)
                             .font(.system(size: 12))
                             .foregroundStyle(BaziTheme.secondary)
                     }
@@ -187,6 +188,20 @@ struct PaipanView: View {
     @ViewBuilder
     private func divider() -> some View {
         Rectangle().fill(BaziTheme.divider).frame(height: 1).padding(.leading, 16)
+    }
+
+    // MARK: - 真太阳时换算量
+
+    /// 展示当前时辰按出生地经度校正后的真太阳时（如「午时 11:00-12:59 · 真太阳时 11:46（-14 分）」）
+    private var trueSolarHint: String {
+        let sc = shichenList[shichenIndex]
+        let offset = BaziCalculator.longitudeOffset(place: place)
+        let total = (sc.hour * 60 + offset + 24 * 60) % (24 * 60)
+        let hh = total / 60
+        let mm = total % 60
+        return String(format: "%@ %@ · 真太阳时 %02d:%02d（%@%d 分）",
+                      sc.name, sc.range, hh, mm,
+                      offset >= 0 ? "+" : "-", abs(offset))
     }
 
     // MARK: - 动作

@@ -63,53 +63,75 @@ struct ReportView: View {
     // MARK: - 综合评分卡（深色）
 
     private func scoreCard(_ c: BaziChart) -> some View {
-        VStack(spacing: 8) {
-            Text("\(score)").font(.system(size: 56, weight: .semibold)).foregroundStyle(.white)
-            Text("综合运势 · \(level)").font(.system(size: 15)).foregroundStyle(BaziTheme.placeholder)
-            Text("\(c.dayMaster)日主 · \(c.pattern)").font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(score)").font(.system(size: 44, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                Text("分 · 综合运势\(level)").font(.system(size: 15)).foregroundStyle(BaziTheme.secondary)
+                Spacer()
+                Text(c.strength)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(BaziTheme.dayColumn).clipShape(Capsule())
+            }
+            Text("\(c.dayMaster)日主 · \(c.pattern)")
+                .font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
+            if !c.strengthNote.isEmpty {
+                Text(c.strengthNote).font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-        .background(BaziTheme.darkTile)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .baziCard()
         .padding(.horizontal, 20)
     }
 
     // MARK: - AI 解读卡（深色）
 
     private func aiCard(_ c: BaziChart) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("AI 解读").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).kerning(1.2)
+                Text("AI 解读").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                 Spacer()
-                if aiLoading {
-                    ProgressView().tint(.white)
-                }
+                if aiLoading { ProgressView().tint(BaziTheme.actionBlue) }
             }
             if let text = aiText {
                 Text(text)
-                    .font(.system(size: 13)).foregroundStyle(.white)
+                    .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
                     .lineSpacing(6)
             } else if aiLoading {
                 Text("灵犀正在结合您的命盘进行解读…")
-                    .font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
+                    .font(.system(size: 13)).foregroundStyle(BaziTheme.tertiary)
                     .lineSpacing(6)
             } else {
                 Text(fallbackAI(c))
-                    .font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
+                    .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
                     .lineSpacing(6)
             }
+            Text(aiText == nil && !aiLoading ? "以上为本地命理解读，联网后由灵犀 AI 生成详版" : "由灵犀 AI 生成 · 仅供文化参考")
+                .font(.system(size: 10)).foregroundStyle(BaziTheme.placeholder)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
-        .background(BaziTheme.darkTile)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(16)
+        .baziCard()
         .padding(.horizontal, 20)
     }
 
-    /// 本地兜底文案（AI 不可用时展示）
+    /// 本地兜底解读（AI 不可用时展示）：按真实格局与十神组合生成
     private func fallbackAI(_ c: BaziChart) -> String {
-        "\(c.dayMaster)日主，\(c.strength)。\(c.pattern)，聪明且善于理财，适合文化创意、口才相关事业。当前大运\(c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : "")，事业稳步上升。性格刚毅重情，但需注意脾气控制。"
+        let hourShi = c.pillars[3].shiShen   // 时干十神
+        let monthShi = c.pillars[1].shiShen  // 月干十神
+        var text = "\(c.dayMaster)日主，生于\(c.pillars[1].zhi)月，\(c.strength)。月令取\(c.pattern)"
+
+        if c.pattern == "七杀格", hourShi == "食神" {
+            text += "，时干食神透出，成食神制杀之象：压力可化为动力，宜以专业与表达立身，不宜硬碰"
+        } else if hourShi == "食神" || hourShi == "伤官" {
+            text += "，时干\(hourShi)泄秀，宜以才艺、表达、创意安身立命"
+        } else {
+            text += "，月干\(monthShi)、时干\(hourShi)并见，宜稳中求进，借喜用\(c.xiYong.joined(separator: "、"))调候"
+        }
+
+        let dy = c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : ""
+        return text + "。当前大运\(dy)，流年宜守拙藏锋、厚积薄发。"
     }
 
     // MARK: - 4 维度卡
@@ -204,11 +226,16 @@ struct ReportView: View {
 
     private func dimensions(_ c: BaziChart) -> [(title: String, desc: String, score: Int)] {
         let strong = c.strength == "身旺"
+        let yueShi = c.pillars[1].shiShen     // 月干十神 → 事业心性
+        let hourShi = c.pillars[3].shiShen    // 时干十神 → 收束与晚年
+        let peiouZhi = c.pillars[2].zhi       // 日支（配偶宫）
+        let peiouShi = c.pillars[2].cangGanShiShen.first ?? "—"
         return [
-            ("性格", strong ? "刚毅果决，重情重义，责任心强" : "温和细腻，善解人意，思虑周详", 9),
-            ("事业", "食神生财，宜文化创意与口才表达", 8),
-            ("财运", "正财平稳，中年后渐入佳境", 7),
-            ("感情", "配偶宫坐食神，晚婚为宜", 8)
+            ("性格", strong ? "身旺气足，主见强、行动力佳，宜主动出击" : "身弱思细，感知力强，宜借势而为",
+             strong ? 9 : 7),
+            ("事业", "月干\(yueShi)透出，事业路径与\(yueShi)心性相合", 8),
+            ("财运", "喜用\(c.xiYong.joined(separator: "、"))，忌\(c.jiShen.joined(separator: "、"))，顺用神而行财自至", 7),
+            ("感情", "配偶宫坐\(peiouZhi)（\(peiouShi)），时柱\(hourShi)收束，晚成更稳", 8)
         ]
     }
 

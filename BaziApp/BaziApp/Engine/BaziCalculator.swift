@@ -153,13 +153,12 @@ enum BaziCalculator {
 
     // MARK: - 空亡（旬空）
 
-    /// 日柱 → 空亡地支
-    static func kongWang(dayPillar: String) -> String {
-        // 旬首（甲子/甲戌/甲申/甲午/甲辰/甲寅）
-        let gan = String(dayPillar.first!)
-        let ganIndex = Gan.all.firstIndex(of: gan)!
-        let xunIndex = ganIndex / 10 * 10 // 旬首在六十甲子中的下标（甲子=0, 甲戌=10, ...）
-        let kongStart = (xunIndex + 8) % 12 // 空亡起始地支下标
+    /// 某柱干支 → 该柱所在旬的空亡地支（逐柱空亡，非全局）
+    /// 六十甲子每旬 10 组，旬内未出现的两个地支即为空亡
+    static func kongWang(ganzhi: String) -> String {
+        guard let idx = liushiJiazi.firstIndex(of: ganzhi) else { return "" }
+        let xunStart = (idx / 10) * 10          // 旬首下标（甲子=0，甲戌=10…）
+        let kongStart = (xunStart + 10) % 12    // 旬内 10 个地支之后的两个地支
         let z1 = Zhi.all[kongStart]
         let z2 = Zhi.all[(kongStart + 1) % 12]
         return z1 + z2
@@ -191,6 +190,7 @@ enum BaziCalculator {
             let startYear = year + age
             let endYear = startYear + 9
             let ny = NaYin.map[gz] ?? ""
+            let xy = XingYun.state(gan: dayGan, zhi: String(gz.last!)) // 日主对大运地支的十二长生
             // 该大运对应的 10 年流年（问真式专业细盘）
             var lns: [LiuNian] = []
             for i in 0..<10 {
@@ -201,7 +201,8 @@ enum BaziCalculator {
                 lns.append(LiuNian(year: ly, ganzhi: lgz, shiShen: lss))
             }
             list.append(DaYun(ganzhi: gz, shiShen: ss, startAge: age, endAge: age + 9,
-                              startYear: startYear, endYear: endYear, naYin: ny, liunian: lns))
+                              startYear: startYear, endYear: endYear, naYin: ny,
+                              xingYun: xy, liunian: lns))
         }
 
         return (direction, "起运 \(startAge) 岁", list)
@@ -257,18 +258,48 @@ enum BaziCalculator {
         return result
     }
 
-    // MARK: - 神煞（主要）
+    // MARK: - 神煞（逐柱，问真式）
 
-    /// 神煞（简化：主要神煞）
-    static func shenSha(dayPillar: String, yearPillar: String, monthPillar: String, hourPillar: String) -> (good: [String], bad: [String]) {
-        var good: [String] = []
-        var bad: [String] = []
+    /// 天德贵人（月支 → 天干；值支者不入表，按干匹配柱）
+    static let tianDe: [String: String] = [
+        "寅": "丁", "卯": "申", "辰": "壬", "巳": "辛", "午": "亥", "未": "甲",
+        "申": "癸", "酉": "寅", "戌": "丙", "亥": "乙", "子": "巳", "丑": "庚"
+    ]
+    /// 月德贵人（月支三合局 → 天干：寅午戌丙、申子辰壬、巳酉丑庚、亥卯未甲）
+    static let yueDe: [String: String] = [
+        "寅": "丙", "午": "丙", "戌": "丙",
+        "申": "壬", "子": "壬", "辰": "壬",
+        "巳": "庚", "酉": "庚", "丑": "庚",
+        "亥": "甲", "卯": "甲", "未": "甲"
+    ]
+
+    /// 神煞（逐柱归属）+ 吉凶色调表（true 吉 / false 凶；未收录者中性）
+    /// perPillar 顺序 = [年柱, 月柱, 日柱, 时柱]
+    static func shenShaDetail(dayPillar: String, yearPillar: String, monthPillar: String, hourPillar: String)
+        -> (perPillar: [[String]], tone: [String: Bool], good: [String], bad: [String]) {
+        let gzs = [yearPillar, monthPillar, dayPillar, hourPillar]
+        var per = [[String]](repeating: [], count: 4)
+        var tone: [String: Bool] = [:]
+
+        /// 按「支匹配」或「干匹配」把神煞挂到命中的柱上；good 传 nil 表示中性（不着色）
+        func add(_ name: String, _ good: Bool?, _ hit: (String, String) -> Bool) {
+            var matched = false
+            for (i, gz) in gzs.enumerated() {
+                let g = String(gz.first!), z = String(gz.last!)
+                if hit(g, z), !per[i].contains(name) {
+                    per[i].append(name)
+                    matched = true
+                }
+            }
+            if matched, let good = good { tone[name] = good }
+        }
 
         let dayGan = String(dayPillar.first!)
         let dayZhi = String(dayPillar.last!)
         let yearZhi = String(yearPillar.last!)
+        let monthZhi = String(monthPillar.last!)
 
-        // 天乙贵人（日干查）
+        // 天乙贵人（日干查支）
         let tianyi: [String: [String]] = [
             "甲": ["丑", "未"], "戊": ["丑", "未"],
             "乙": ["子", "申"], "己": ["子", "申"],
@@ -276,82 +307,84 @@ enum BaziCalculator {
             "庚": ["丑", "未"], "辛": ["寅", "午"],
             "壬": ["卯", "巳"], "癸": ["卯", "巳"]
         ]
-        if let zhi = tianyi[dayGan], zhi.contains(where: { [$0, $0].contains(dayZhi) || yearZhi == $0 || dayZhi == $0 }) {
-            good.append("天乙贵人")
-        }
+        for z in tianyi[dayGan] ?? [] { add("天乙贵人", true, { _, zz in zz == z }) }
 
-        // 文昌（日干查）
+        // 文昌（日干查支）
         let wenchang: [String: String] = [
             "甲": "巳", "乙": "午", "丙": "申", "丁": "酉", "戊": "申",
             "己": "酉", "庚": "亥", "辛": "子", "壬": "寅", "癸": "卯"
         ]
-        if wenchang[dayGan] == dayZhi { good.append("文昌") }
+        if let z = wenchang[dayGan] { add("文昌", true, { _, zz in zz == z }) }
 
-        // 桃花（日支查）
+        // 桃花（年支 / 日支查）
         let taohua: [String: String] = [
-            "申": "酉", "子": "酉", "辰": "酉",
-            "寅": "卯", "午": "卯", "戌": "卯",
-            "巳": "午", "酉": "午", "丑": "午",
-            "亥": "子", "卯": "子", "未": "子"
+            "申": "酉", "子": "酉", "辰": "酉", "寅": "卯", "午": "卯", "戌": "卯",
+            "巳": "午", "酉": "午", "丑": "午", "亥": "子", "卯": "子", "未": "子"
         ]
-        if taohua[yearZhi] == dayZhi || taohua[dayZhi] == dayZhi { good.append("桃花") }
+        if let z = taohua[yearZhi] { add("桃花", nil, { _, zz in zz == z }) }
+        if let z = taohua[dayZhi] { add("桃花", nil, { _, zz in zz == z }) }
 
-        // 驿马（日支查）
+        // 驿马（年支 / 日支查）
         let yima: [String: String] = [
-            "申": "寅", "子": "寅", "辰": "寅",
-            "寅": "申", "午": "申", "戌": "申",
-            "巳": "亥", "酉": "亥", "丑": "亥",
-            "亥": "巳", "卯": "巳", "未": "巳"
+            "申": "寅", "子": "寅", "辰": "寅", "寅": "申", "午": "申", "戌": "申",
+            "巳": "亥", "酉": "亥", "丑": "亥", "亥": "巳", "卯": "巳", "未": "巳"
         ]
-        if yima[dayZhi] == yearZhi { good.append("驿马") }
+        if let z = yima[yearZhi] { add("驿马", nil, { _, zz in zz == z }) }
+        if let z = yima[dayZhi] { add("驿马", nil, { _, zz in zz == z }) }
 
-        // 将星（日支查）
+        // 将星（三合旺位，年支 / 日支查）
         let jiangxing: [String: String] = [
-            "申": "子", "子": "子", "辰": "子",
-            "寅": "午", "午": "午", "戌": "午",
-            "巳": "酉", "酉": "酉", "丑": "酉",
-            "亥": "卯", "卯": "卯", "未": "卯"
+            "申": "子", "子": "子", "辰": "子", "寅": "午", "午": "午", "戌": "午",
+            "巳": "酉", "酉": "酉", "丑": "酉", "亥": "卯", "卯": "卯", "未": "卯"
         ]
-        if jiangxing[dayZhi] == dayZhi { good.append("将星") }
+        if let z = jiangxing[yearZhi] { add("将星", true, { _, zz in zz == z }) }
+        if let z = jiangxing[dayZhi] { add("将星", true, { _, zz in zz == z }) }
 
-        // 华盖（日支查）
+        // 华盖（年支 / 日支查）
         let huagai: [String: String] = [
-            "申": "辰", "子": "辰", "辰": "辰",
-            "寅": "戌", "午": "戌", "戌": "戌",
-            "巳": "丑", "酉": "丑", "丑": "丑",
-            "亥": "未", "卯": "未", "未": "未"
+            "申": "辰", "子": "辰", "辰": "辰", "寅": "戌", "午": "戌", "戌": "戌",
+            "巳": "丑", "酉": "丑", "丑": "丑", "亥": "未", "卯": "未", "未": "未"
         ]
-        if huagai[dayZhi] == dayZhi { good.append("华盖") }
+        if let z = huagai[yearZhi] { add("华盖", true, { _, zz in zz == z }) }
+        if let z = huagai[dayZhi] { add("华盖", true, { _, zz in zz == z }) }
 
-        // 魁罡（日柱查）
-        let kuigang = ["庚辰", "壬辰", "戊戌", "庚戌"]
-        if kuigang.contains(dayPillar) { bad.append("魁罡") }
-
-        // 羊刃（日干查）
+        // 羊刃（日干查支）
         let yangren: [String: String] = [
             "甲": "卯", "乙": "辰", "丙": "午", "丁": "未", "戊": "午",
             "己": "未", "庚": "酉", "辛": "戌", "壬": "子", "癸": "丑"
         ]
-        if yangren[dayGan] == dayZhi { bad.append("羊刃") }
+        if let z = yangren[dayGan] { add("羊刃", false, { _, zz in zz == z }) }
 
-        // 劫煞 / 亡神（简化，用日支三合）
+        // 劫煞（年支 / 日支查）
         let jiesha: [String: String] = [
-            "申": "巳", "子": "巳", "辰": "巳",
-            "寅": "亥", "午": "亥", "戌": "亥",
-            "巳": "申", "酉": "申", "丑": "申",
-            "亥": "寅", "卯": "寅", "未": "寅"
+            "申": "巳", "子": "巳", "辰": "巳", "寅": "亥", "午": "亥", "戌": "亥",
+            "巳": "申", "酉": "申", "丑": "申", "亥": "寅", "卯": "寅", "未": "寅"
         ]
-        if jiesha[dayZhi] == yearZhi { bad.append("劫煞") }
+        if let z = jiesha[yearZhi] { add("劫煞", false, { _, zz in zz == z }) }
+        if let z = jiesha[dayZhi] { add("劫煞", false, { _, zz in zz == z }) }
 
+        // 亡神（年支 / 日支查）
         let wangshen: [String: String] = [
-            "申": "亥", "子": "亥", "辰": "亥",
-            "寅": "巳", "午": "巳", "戌": "巳",
-            "巳": "寅", "酉": "寅", "丑": "寅",
-            "亥": "申", "卯": "申", "未": "申"
+            "申": "亥", "子": "亥", "辰": "亥", "寅": "巳", "午": "巳", "戌": "巳",
+            "巳": "寅", "酉": "寅", "丑": "寅", "亥": "申", "卯": "申", "未": "申"
         ]
-        if wangshen[dayZhi] == yearZhi { bad.append("亡神") }
+        if let z = wangshen[yearZhi] { add("亡神", false, { _, zz in zz == z }) }
+        if let z = wangshen[dayZhi] { add("亡神", false, { _, zz in zz == z }) }
 
-        return (good, bad)
+        // 魁罡（日柱）
+        if ["庚辰", "壬辰", "戊戌", "庚戌"].contains(dayPillar) {
+            add("魁罡", false, { g, z in g + z == dayPillar })
+        }
+
+        // 天德贵人 / 月德贵人（月支 → 天干，落在天干所在之柱）
+        if let g = tianDe[monthZhi], Gan.all.contains(g) { add("天德贵人", true, { gg, _ in gg == g }) }
+        if let g = yueDe[monthZhi], Gan.all.contains(g) { add("月德贵人", true, { gg, _ in gg == g }) }
+
+        var good: [String] = [], bad: [String] = []
+        for (name, isGood) in tone {
+            if isGood { good.append(name) } else { bad.append(name) }
+        }
+        return (per, tone, good.sorted(), bad.sorted())
     }
 
     // MARK: - 五行统计 & 喜用神
@@ -369,25 +402,24 @@ enum BaziCalculator {
         return count
     }
 
-    /// 简化喜用神判断（日主旺衰 → 喜忌）
-    static func xiYongJiShen(dayGan: String, wuxing: [String: Int]) -> (xiYong: [String], jiShen: [String]) {
+    /// 喜用神 / 忌神（结合身强弱与命局实缺：喜用取最缺者，忌神取最旺者）
+    static func xiYongJiShen(dayGan: String, wuxing: [String: Int], isStrong: Bool) -> (xiYong: [String], jiShen: [String]) {
         let dayElem = Gan.wuxing[Gan.all.firstIndex(of: dayGan)!]
-        let dayCount = wuxing[dayElem] ?? 0
-        let shengWoElem = ["木": "水", "火": "木", "土": "火", "金": "土", "水": "金"][dayElem]!
-        let shengCount = wuxing[shengWoElem] ?? 0
-        // 身旺（日主 + 生扶 >= 其他）
-        let isStrong = (dayCount + shengCount) >= 6
+        let shengWo = ["木": "水", "火": "木", "土": "火", "金": "土", "水": "金"][dayElem]! // 印
+        let woSheng = ["木": "火", "火": "土", "土": "金", "金": "水", "水": "木"][dayElem]! // 食伤
+        let woKe = ["木": "土", "火": "金", "土": "水", "金": "木", "水": "火"][dayElem]!    // 财
+        let keWo = ["木": "金", "火": "水", "土": "木", "金": "火", "水": "土"][dayElem]!    // 官杀
 
         if isStrong {
-            // 身旺：喜克泄耗（克我=官杀、我生=食伤、我克=财），忌生扶（印、比劫）
-            let keWoElem = ["木": "金", "火": "水", "土": "木", "金": "火", "水": "土"][dayElem]!
-            let woShengElem = ["木": "火", "火": "土", "土": "金", "金": "水", "水": "木"][dayElem]!
-            let woKeElem = ["木": "土", "火": "金", "土": "水", "金": "木", "水": "火"][dayElem]!
-            return ([keWoElem, woShengElem, woKeElem], [shengWoElem, dayElem])
+            // 身旺：喜克泄耗，取命局中最缺的两项；忌生扶，取最旺的两项
+            let xi = [woSheng, woKe, keWo].sorted { (wuxing[$0] ?? 0) < (wuxing[$1] ?? 0) }
+            let ji = [dayElem, shengWo].sorted { (wuxing[$0] ?? 0) > (wuxing[$1] ?? 0) }
+            return (Array(xi.prefix(2)), Array(ji.prefix(2)))
         } else {
-            // 身弱：喜生扶（印、比劫），忌克泄耗
-            let keWoElem = ["木": "金", "火": "水", "土": "木", "金": "火", "水": "土"][dayElem]!
-            return ([shengWoElem, dayElem], [keWoElem, dayElem])
+            // 身弱：喜生扶（印、比劫），忌克泄耗中最旺的两项
+            let xi = [shengWo, dayElem].sorted { (wuxing[$0] ?? 0) > (wuxing[$1] ?? 0) }
+            let ji = [keWo, woSheng, woKe].sorted { (wuxing[$0] ?? 0) > (wuxing[$1] ?? 0) }
+            return (Array(xi.prefix(2)), Array(ji.prefix(2)))
         }
     }
 
@@ -503,6 +535,137 @@ enum BaziCalculator {
         return "建禄格" // 月令为比劫
     }
 
+    // MARK: - 胎息 / 人元司令 / 称骨 / 调候 / 旺衰三判（问真式）
+
+    /// 胎息：日柱天干五合 + 地支六合（如 庚辰 → 乙酉）
+    static func taiXi(dayPillar: String) -> String {
+        let g = String(dayPillar.first!)
+        let z = String(dayPillar.last!)
+        let tg = GanHe.map[g] ?? g
+        let tz = Zhi.liuHe[z] ?? z
+        return tg + tz
+    }
+
+    /// 人元司令分野：月支各藏干司权天数（按节后天数推算当令之干）
+    static let renYuanTable: [String: [(gan: String, days: Int)]] = [
+        "寅": [("戊", 7), ("丙", 7), ("甲", 16)],
+        "卯": [("甲", 10), ("乙", 20)],
+        "辰": [("乙", 9), ("癸", 3), ("戊", 18)],
+        "巳": [("戊", 5), ("庚", 9), ("丙", 16)],
+        "午": [("丙", 10), ("己", 9), ("丁", 11)],
+        "未": [("丁", 9), ("乙", 3), ("己", 18)],
+        "申": [("己", 7), ("戊", 3), ("壬", 3), ("庚", 17)],
+        "酉": [("庚", 10), ("辛", 20)],
+        "戌": [("辛", 9), ("丁", 3), ("戊", 18)],
+        "亥": [("戊", 7), ("甲", 5), ("壬", 18)],
+        "子": [("壬", 10), ("癸", 20)],
+        "丑": [("癸", 9), ("辛", 3), ("己", 18)]
+    ]
+
+    /// 人元司令：月支 + 节后天数 → 当令之干（如 庚金）
+    static func renYuanSiLing(monthZhi: String, daysAfterJie: Int) -> String {
+        guard let segs = renYuanTable[monthZhi], !segs.isEmpty else { return "" }
+        var acc = 0
+        for seg in segs {
+            acc += seg.days
+            if daysAfterJie < acc {
+                return seg.gan + Gan.wuxing[Gan.all.firstIndex(of: seg.gan) ?? 0]
+            }
+        }
+        let last = segs[segs.count - 1]
+        return last.gan + Gan.wuxing[Gan.all.firstIndex(of: last.gan) ?? 0]
+    }
+
+    /// 出生日所属月支 + 距上一个「节」的天数
+    static func jieQiOffset(year: Int, month: Int, day: Int) -> (zhi: String, days: Int) {
+        let mm = month >= 2 ? month : month + 12
+        var prevIdx = -1
+        for (i, jq) in jieQiDates.enumerated() {
+            let jmm = jq.month >= 2 ? jq.month : jq.month + 12
+            if mm > jmm || (mm == jmm && day >= jq.day) { prevIdx = i }
+        }
+        // 小寒（1/6）之前 → 属上一年大雪（子月）
+        if prevIdx == -1 {
+            let jd1 = julianDay(year: year - 1, month: 12, day: 7)
+            let jd2 = julianDay(year: year, month: month, day: day)
+            return (Zhi.all[jieZhiIndex[10]], jd2 - jd1)
+        }
+        let jq = jieQiDates[prevIdx]
+        let jd1 = julianDay(year: year, month: jq.month, day: jq.day)
+        let jd2 = julianDay(year: year, month: month, day: day)
+        return (Zhi.all[jieZhiIndex[prevIdx]], jd2 - jd1)
+    }
+
+    /// 袁天罡称骨：年柱 + 农历月 + 农历日 + 时支
+    static func chengGu(yearPillar: String, lunarMonth: Int, lunarDay: Int, hourZhiIndex: Int) -> String {
+        let y = ChengGu.yearTable[yearPillar] ?? 0
+        let m = ChengGu.monthTable[max(0, min(11, lunarMonth - 1))]
+        let d = ChengGu.dayTable[max(0, min(29, lunarDay - 1))]
+        let h = ChengGu.hourTable[max(0, min(11, hourZhiIndex))]
+        return ChengGu.string(totalQian: y + m + d + h)
+    }
+
+    /// 调候用神（《穷通宝鉴》概要）：日干 + 月支 → 调候天干（按优先级）
+    static let tiaoHouTable: [String: String] = [
+        "甲寅": "丙癸", "甲卯": "庚丙", "甲辰": "庚丁壬", "甲巳": "癸丁庚", "甲午": "癸庚丁", "甲未": "癸丁庚",
+        "甲申": "庚丁壬", "甲酉": "庚丁丙", "甲戌": "庚甲丁壬", "甲亥": "庚丁丙戊", "甲子": "丁庚丙", "甲丑": "丁庚丙",
+        "乙寅": "丙癸", "乙卯": "丙癸", "乙辰": "癸戊丙", "乙巳": "癸", "乙午": "癸丙", "乙未": "癸丙",
+        "乙申": "癸丙", "乙酉": "癸丙丁", "乙戌": "癸辛", "乙亥": "丙戊", "乙子": "丙", "乙丑": "丙",
+        "丙寅": "壬庚", "丙卯": "壬己", "丙辰": "壬甲", "丙巳": "壬癸庚", "丙午": "壬庚", "丙未": "壬庚",
+        "丙申": "壬戊", "丙酉": "壬癸", "丙戌": "甲壬", "丙亥": "甲戊庚壬", "丙子": "壬戊己", "丙丑": "壬甲",
+        "丁寅": "甲庚", "丁卯": "庚甲", "丁辰": "甲庚", "丁巳": "甲癸壬", "丁午": "壬癸庚", "丁未": "甲壬庚",
+        "丁申": "甲庚丙戊", "丁酉": "甲庚丙戊", "丁戌": "甲庚戊", "丁亥": "甲庚", "丁子": "甲庚", "丁丑": "甲庚",
+        "戊寅": "丙甲癸", "戊卯": "甲丙癸", "戊辰": "甲丙癸", "戊巳": "甲丙癸", "戊午": "壬甲丙", "戊未": "癸甲丙",
+        "戊申": "丙癸甲", "戊酉": "丙癸", "戊戌": "甲丙癸", "戊亥": "甲丙", "戊子": "丙甲", "戊丑": "丙甲",
+        "己寅": "丙庚甲", "己卯": "甲癸丙", "己辰": "丙甲癸", "己巳": "癸丙", "己午": "癸丙", "己未": "癸丙",
+        "己申": "丙癸", "己酉": "丙癸", "己戌": "丙甲癸", "己亥": "丙甲", "己子": "丙甲", "己丑": "丙甲",
+        "庚寅": "戊甲壬丙", "庚卯": "丁甲丙庚", "庚辰": "甲丁壬癸", "庚巳": "壬戊丙丁", "庚午": "壬癸戊", "庚未": "丁甲",
+        "庚申": "丁甲", "庚酉": "丁甲丙", "庚戌": "甲壬", "庚亥": "丁丙", "庚子": "丁丙甲", "庚丑": "丙丁甲",
+        "辛寅": "己壬庚", "辛卯": "壬甲", "辛辰": "壬甲", "辛巳": "壬癸甲", "辛午": "壬己癸", "辛未": "壬庚甲",
+        "辛申": "壬甲戊", "辛酉": "壬甲", "辛戌": "壬甲", "辛亥": "壬丙", "辛子": "壬丙", "辛丑": "壬丙己",
+        "壬寅": "庚丙戊", "壬卯": "戊辛庚", "壬辰": "甲庚", "壬巳": "壬癸庚辛", "壬午": "癸庚辛", "壬未": "辛甲庚",
+        "壬申": "戊丁", "壬酉": "甲庚", "壬戌": "甲丙", "壬亥": "戊丙庚", "壬子": "戊丙", "壬丑": "丙戊丁",
+        "癸寅": "辛庚丙", "癸卯": "庚辛", "癸辰": "丙辛甲", "癸巳": "辛庚", "癸午": "庚辛壬癸", "癸未": "庚辛壬癸",
+        "癸申": "庚辛丁", "癸酉": "辛丙", "癸戌": "辛甲壬癸", "癸亥": "庚辛戊丁", "癸子": "丙辛", "癸丑": "丙丁"
+    ]
+
+    /// 调候用神（取前两位，显示为「干 + 五行」）
+    static func tiaoHou(dayGan: String, monthZhi: String) -> String {
+        guard let s = tiaoHouTable[dayGan + monthZhi], !s.isEmpty else { return "" }
+        let stems = Array(s).prefix(2).map { String($0) }
+        return stems.map { $0 + Gan.wuxing[Gan.all.firstIndex(of: $0) ?? 0] }.joined(separator: "、")
+    }
+
+    /// 旺衰三判：得令（日主在月令十二长生得地）/ 得地（地支藏干见同气或印星）/ 得势（天干比劫印星帮扶）
+    static func wangShuai(dayGan: String, monthZhi: String, pillars: [Pillar], wuxing: [String: Int])
+        -> (deLing: Bool, deDi: Bool, deShi: Bool, strength: String, topTwo: String) {
+        let dayElem = Gan.wuxing[Gan.all.firstIndex(of: dayGan)!]
+        let shengWo = ["木": "水", "火": "木", "土": "火", "金": "土", "水": "金"][dayElem]!
+
+        // 得令：日主在月令处于生旺之地
+        let yueState = XingYun.state(gan: dayGan, zhi: monthZhi)
+        let deLing = ["长生", "冠带", "临官", "帝旺", "养"].contains(yueState)
+
+        // 得地：地支本气或藏干见日主同气 / 印星
+        var deDi = false
+        for p in pillars {
+            if Zhi.wuxing[Zhi.all.firstIndex(of: p.zhi) ?? 0] == dayElem { deDi = true }
+            for cg in p.cangGan {
+                let e = Gan.wuxing[Gan.all.firstIndex(of: cg) ?? 0]
+                if e == dayElem || e == shengWo { deDi = true }
+            }
+        }
+
+        // 得势：天干见比劫或印星 ≥ 2
+        let help = pillars.filter { ["比肩", "劫财", "正印", "偏印"].contains($0.shiShen) }.count
+        let deShi = help >= 2
+
+        let score = (deLing ? 1 : 0) + (deDi ? 1 : 0) + (deShi ? 1 : 0)
+        let strength = score >= 2 ? "身旺" : "身弱"
+        let topTwo = wuxing.sorted { $0.value > $1.value }.prefix(2).map { $0.key }.joined(separator: "")
+        return (deLing, deDi, deShi, strength, topTwo)
+    }
+
     // MARK: - 主入口：完整排盘
 
     static func calculate(name: String, gender: String, solarDate: String, hour: String, place: String) -> BaziChart {
@@ -530,50 +693,45 @@ enum BaziCalculator {
         let dayGan = String(dp.first!)
         let hp = hourPillar(dayGan: dayGan, hour: trueHour, minute: trueMinute)
 
+        // 神煞（逐柱归属 + 吉凶表）
+        let ssDetail = shenShaDetail(dayPillar: dp, yearPillar: yp, monthPillar: mp, hourPillar: hp)
+
         // 构建四柱
-        func buildPillar(_ gz: String, isDay: Bool) -> Pillar {
+        // 星运 = 日主对本柱地支的十二长生；自坐 = 本柱天干对本柱地支；空亡 = 本柱所在旬
+        func buildPillar(_ gz: String, isDay: Bool, index: Int) -> Pillar {
             let g = String(gz.first!)
             let z = String(gz.last!)
             let ss = isDay ? "日主" : ShiShen.of(dayGan: dayGan, targetGan: g)
             let cg = Zhi.cangGan[Zhi.all.firstIndex(of: z)!]
             let cgSS = cg.map { ShiShen.of(dayGan: dayGan, targetGan: $0) }
             let ny = NaYin.map[gz] ?? ""
-            let xy = XingYun.state(gan: g, zhi: z)
-            let kw = isDay ? kongWang(dayPillar: dp) : ""
-            return Pillar(gan: g, zhi: z, shiShen: ss, cangGan: cg, cangGanShiShen: cgSS, naYin: ny, xingYun: xy, kongWang: kw)
+            let xy = XingYun.state(gan: dayGan, zhi: z)
+            let zz = XingYun.state(gan: g, zhi: z)
+            return Pillar(gan: g, zhi: z, shiShen: ss, cangGan: cg, cangGanShiShen: cgSS,
+                          naYin: ny, xingYun: xy, ziZuo: zz,
+                          kongWang: kongWang(ganzhi: gz), shenSha: ssDetail.perPillar[index])
         }
-        // 空亡用日柱所在旬，四柱同空亡（简化：月/日/时同旬空，年柱单独）
-        let kwAll = kongWang(dayPillar: dp)
-        let ypPillar = Pillar(gan: String(yp.first!), zhi: String(yp.last!),
-                              shiShen: ShiShen.of(dayGan: dayGan, targetGan: String(yp.first!)),
-                              cangGan: Zhi.cangGan[Zhi.all.firstIndex(of: String(yp.last!))!],
-                              cangGanShiShen: Zhi.cangGan[Zhi.all.firstIndex(of: String(yp.last!))!].map { ShiShen.of(dayGan: dayGan, targetGan: $0) },
-                              naYin: NaYin.map[yp] ?? "",
-                              xingYun: XingYun.state(gan: String(yp.first!), zhi: String(yp.last!)),
-                              kongWang: kongWang(dayPillar: yp))
-        let mpPillar = buildPillar(mp, isDay: false)
-        let dpPillar = buildPillar(dp, isDay: true)
-        let hpPillar = buildPillar(hp, isDay: false)
-        // 修正月/日/时柱空亡（同旬）
-        let mpFixed = Pillar(gan: mpPillar.gan, zhi: mpPillar.zhi, shiShen: mpPillar.shiShen, cangGan: mpPillar.cangGan, cangGanShiShen: mpPillar.cangGanShiShen, naYin: mpPillar.naYin, xingYun: mpPillar.xingYun, kongWang: kwAll)
-        let dpFixed = Pillar(gan: dpPillar.gan, zhi: dpPillar.zhi, shiShen: dpPillar.shiShen, cangGan: dpPillar.cangGan, cangGanShiShen: dpPillar.cangGanShiShen, naYin: dpPillar.naYin, xingYun: dpPillar.xingYun, kongWang: kwAll)
-        let hpFixed = Pillar(gan: hpPillar.gan, zhi: hpPillar.zhi, shiShen: hpPillar.shiShen, cangGan: hpPillar.cangGan, cangGanShiShen: hpPillar.cangGanShiShen, naYin: hpPillar.naYin, xingYun: hpPillar.xingYun, kongWang: kwAll)
-
-        let pillars = [ypPillar, mpFixed, dpFixed, hpFixed]
+        let pillars = [buildPillar(yp, isDay: false, index: 0),
+                       buildPillar(mp, isDay: false, index: 1),
+                       buildPillar(dp, isDay: true, index: 2),
+                       buildPillar(hp, isDay: false, index: 3)]
 
         // 五行统计
         let wuxing = wuxingCount(pillars: pillars)
-        // 日主 + 身强弱 + 格局
+        // 日主 + 旺衰三判 + 格局
         let dayElem = Gan.wuxing[Gan.all.firstIndex(of: dayGan)!]
         let dayMaster = dayGan + dayElem
-        let strength = wuxing[dayElem]! >= 3 ? "身旺" : "身弱"
+        let monthZhi = String(mp.last!)
+        let ws = wangShuai(dayGan: dayGan, monthZhi: monthZhi, pillars: pillars, wuxing: wuxing)
+        let strength = ws.strength
         let pattern = self.pattern(monthPillar: mp, dayGan: dayGan)
 
-        // 神煞
-        let ss = shenSha(dayPillar: dp, yearPillar: yp, monthPillar: mp, hourPillar: hp)
-
-        // 喜用神
-        let (xiyong, jishen) = xiYongJiShen(dayGan: dayGan, wuxing: wuxing)
+        // 喜用神 / 忌神（结合旺衰与命局实缺）+ 综合解读
+        let isStrong = strength == "身旺"
+        let (xiyong, jishen) = xiYongJiShen(dayGan: dayGan, wuxing: wuxing, isStrong: isStrong)
+        let strengthNote = isStrong
+            ? "\(ws.topTwo)偏旺，宜\(xiyong.joined(separator: "、"))泄秀调候"
+            : "日主偏弱，宜\(xiyong.joined(separator: "、"))生扶为要"
 
         // 大运
         let dy = daYun(year: year, month: month, day: day, hour: hh, gender: gender, monthPillar: mp)
@@ -604,16 +762,26 @@ enum BaziCalculator {
         let shenGongStr = shenGong(lunarMonth: lunar.month, shichenIndex: shichenIdx, yearGan: yearGan)
         let mingGuaStr = mingGua(year: year, month: month, day: day, gender: gender)
         let xingXiuStr = xingXiu(mingGongZhi: String(mingGongStr.last!))
+        // 胎息 / 人元司令 / 称骨 / 调候
+        let taiXiStr = taiXi(dayPillar: dp)
+        let jqOffset = jieQiOffset(year: year, month: month, day: day)
+        let renYuanStr = renYuanSiLing(monthZhi: jqOffset.zhi, daysAfterJie: jqOffset.days)
+        let chengGuStr = chengGu(yearPillar: yp, lunarMonth: lunar.month, lunarDay: lunar.day, hourZhiIndex: shichenIdx)
+        let tiaoHouStr = tiaoHou(dayGan: dayGan, monthZhi: monthZhi)
 
         return BaziChart(
             name: name, gender: gender, solarDate: solarDate, hour: hour, place: place,
             trueSolarTime: trueSolarTime, longitudeOffset: lonOffset,
             shengxiao: shengxiao, xingzuo: xingzuo, lunarDate: lunarDate,
-            jieQiDetail: jieQiDetailStr, taiYuan: taiYuanFull, mingGong: mingGongStr,
-            shenGong: shenGongStr, mingGua: mingGuaStr, xingXiu: xingXiuStr,
-            qiYunDetail: dy.start,
-            pillars: pillars, dayMaster: dayMaster, strength: strength, pattern: pattern,
-            wuxingCount: wuxing, goodShenSha: ss.good, badShenSha: ss.bad,
+            jieQiDetail: jieQiDetailStr, taiYuan: taiYuanFull, taiXi: taiXiStr,
+            mingGong: mingGongStr, shenGong: shenGongStr,
+            mingGua: mingGuaStr, xingXiu: xingXiuStr,
+            renYuanSiLing: renYuanStr, chengGu: chengGuStr, qiYunDetail: dy.start,
+            pillars: pillars, dayMaster: dayMaster, strength: strength,
+            deLing: ws.deLing, deDi: ws.deDi, deShi: ws.deShi,
+            strengthNote: strengthNote, pattern: pattern, tiaoHou: tiaoHouStr,
+            wuxingCount: wuxing,
+            goodShenSha: ssDetail.good, badShenSha: ssDetail.bad, shenShaTone: ssDetail.tone,
             xiYong: xiyong, jiShen: jishen,
             dayunDirection: dy.direction, dayunStart: dy.start, dayun: dy.list,
             liunian: ln, currentDayunIndex: curDyIndex

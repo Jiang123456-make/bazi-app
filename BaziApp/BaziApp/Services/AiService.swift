@@ -39,17 +39,28 @@ struct AiService {
     /// 命盘摘要文本
     static func chartSummary(_ c: BaziChart) -> String {
         let pillars = c.pillars.map { "\($0.ganzhi)(\($0.shiShen))" }.joined(separator: " ")
+        let xingYun = c.pillars.map { "\($0.zhi)\($0.xingYun)" }.joined(separator: " ")
         let dayun = c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].ganzhi : "—"
+        let dayunShi = c.dayun.indices.contains(c.currentDayunIndex) ? c.dayun[c.currentDayunIndex].shiShen : "—"
         let wuxing = c.wuxingCount.sorted { $0.key < $1.key }.map { "\($0.key)\($0.value)" }.joined(separator: " ")
-        return [
+        let shensha = (c.goodShenSha + c.badShenSha).joined(separator: "、")
+        let liunian = c.liunian.prefix(3).map { "\($0.year)\($0.ganzhi)(\($0.shiShen))" }.joined(separator: " ")
+        var lines = [
             "姓名：\(c.name)（\(c.gender)）",
             "八字四柱：\(pillars)",
             "日主：\(c.dayMaster)，\(c.strength)，\(c.pattern)",
-            "五行：\(wuxing)",
+            "旺衰三判：得令\(c.deLing ? "是" : "否")、得地\(c.deDi ? "是" : "否")、得势\(c.deShi ? "是" : "否")；\(c.strengthNote)",
+            "五行个数：\(wuxing)",
+            "星运：\(xingYun)",
             "喜用神：\(c.xiYong.joined(separator: "、"))，忌神：\(c.jiShen.joined(separator: "、"))",
-            "生肖：\(c.shengxiao)，胎元：\(c.taiYuan)，命宫：\(c.mingGong)",
-            "当前大运：\(dayun)"
-        ].joined(separator: "；")
+            "调候：\(c.tiaoHou.isEmpty ? "命局中和" : c.tiaoHou)",
+            "生肖：\(c.shengxiao)，胎元：\(c.taiYuan)，胎息：\(c.taiXi)，命宫：\(c.mingGong)",
+            "人元司令：\(c.renYuanSiLing)，称骨：\(c.chengGu)"
+        ]
+        if !shensha.isEmpty { lines.append("神煞：\(shensha)") }
+        lines.append("当前大运：\(dayun)(\(dayunShi))")
+        lines.append("近期流年：\(liunian)")
+        return lines.joined(separator: "；")
     }
 
     // MARK: - 数据模型
