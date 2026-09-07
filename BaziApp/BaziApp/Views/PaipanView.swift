@@ -253,7 +253,7 @@ struct PaipanView: View {
                     wheelPicker("月", items: (1...12).map { "\($0)月" }, selection: $solarMIdx)
                     wheelPicker("日", items: (1...solarDayCount).map { "\($0)日" }, selection: $solarDIdx)
                 }
-                wheelPicker("时辰", items: shichenList.map(\.name), selection: $shichenIdx)
+                wheelPicker("时辰", items: shichenWheelItems, selection: $shichenIdx, width: 154, fontSize: 13)
             }
             .frame(height: 118)
 
@@ -277,14 +277,23 @@ struct PaipanView: View {
         .onChange(of: lunarMIdx) { _ in clampLunar() }
     }
 
-    private func wheelPicker(_ label: String, items: [String], selection: Binding<Int>) -> some View {
+    /// 时辰滚轮条目：时辰名 + 24 小时制时段（如「午时 11:00-12:59」）
+    private var shichenWheelItems: [String] {
+        shichenList.map { $0.name == "时辰未知" ? "未知 · 按午时试排" : "\($0.name) \($0.range)" }
+    }
+
+    private func wheelPicker(_ label: String, items: [String], selection: Binding<Int>,
+                             width: CGFloat? = nil, fontSize: CGFloat = 15) -> some View {
         Picker(label, selection: selection) {
             ForEach(items.indices, id: \.self) { i in
-                Text(items[i]).tag(i)
+                Text(items[i])
+                    .font(.system(size: fontSize))
+                    .tag(i)
             }
         }
         .pickerStyle(.wheel)
-        .frame(maxWidth: .infinity)
+        .font(.system(size: fontSize))
+        .frame(width: width, maxWidth: width == nil ? .infinity : nil)
         .frame(height: 118)
         .clipped()
     }
