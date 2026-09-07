@@ -1,6 +1,9 @@
 import SwiftUI
+import UIKit
 
-/// 屏 4：顾问·对话（真实 AI 接入，网络异常时回退本地解读）
+/// 屏 4：顾问·对话（真实 AI 接入 + 结构化回复卡；网络异常回退本地解读）
+/// AI 回复按「话题 / 结论 / 分析 / 建议 / 追问」五段式输出，客户端解析渲染为结构化卡片；
+/// 解析失败自动降级为纯文本气泡，保证任何回复都能展示。
 struct AdvisorView: View {
     let chart: BaziChart?
 
@@ -8,11 +11,12 @@ struct AdvisorView: View {
     @State private var input = ""
     @State private var isTyping = false
 
-    private let quickQuestions = [
-        "我的事业发展如何？",
-        "我的财运怎么样？",
-        "感情婚姻如何？",
-        "健康需要注意什么？"
+    /// 欢迎卡话题入口（标签 + 实际发送的问题）
+    private let topics: [(label: String, question: String)] = [
+        ("事业发展", "我的事业发展如何？"),
+        ("财运分析", "我的财运怎么样？"),
+        ("感情婚姻", "感情婚姻如何？"),
+        ("健康提醒", "健康需要注意什么？")
     ]
 
     var body: some View {
@@ -32,42 +36,23 @@ struct AdvisorView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 8)
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        ForEach(messages) { msg in
-                            messageRow(msg)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            ForEach(messages) { messageRow($0) }
+                            if isTyping { typingRow }
+                            Color.clear.frame(height: 1).id("chatBottom")
                         }
-                        if isTyping {
-                            typingRow
-                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .onChange(of: messages.count) { _ in scrollToBottom(proxy) }
+                    .onChange(of: isTyping) { _ in scrollToBottom(proxy) }
                 }
 
-                // 快捷回复
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(quickQuestions, id: \.self) { q in
-                            Button(action: { ask(q) }) {
-                                Text(q).font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
-                                    .padding(.horizontal, 16).padding(.vertical, 8)
-                                    .background(BaziTheme.fill).clipShape(Capsule())
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
-                .padding(.bottom, 8)
-
-                // 输入栏
+                // 输入栏（麦克风按钮未实现，已移除）
                 HStack(spacing: 8) {
-                    Button(action: {}) {
-                        Image(systemName: "mic")
-                            .font(.system(size: 18)).foregroundStyle(BaziTheme.secondary)
-                            .frame(width: 44, height: 44)
-                            .background(BaziTheme.fill).clipShape(Circle())
-                    }
                     TextField("输入你的问题…", text: $input)
                         .font(.system(size: 15))
                         .padding(.horizontal, 16).padding(.vertical, 11)
@@ -80,110 +65,291 @@ struct AdvisorView: View {
                             .frame(width: 44, height: 44)
                             .background(BaziTheme.actionBlue).clipShape(Circle())
                     }
+                    .disabled(isTyping)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
             }
             .background(BaziTheme.canvas)
-            .onAppear { loadGreeting() }
+            .onAppear { loadWelcome() }
         }
     }
 
     // MARK: - 消息行
 
     private func messageRow(_ msg: Message) -> some View {
-        VStack(spacing: 4) {
-            Text(msg.time).font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
-            HStack {
-                if msg.isAI {
-                    HStack(alignment: .top, spacing: 8) {
-                        ZStack {
-                            Circle().fill(BaziTheme.actionBlue).frame(width: 32, height: 32)
-                            Text("灵").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                        }
-                        Text(msg.text)
-                            .font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .background(BaziTheme.fill)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        Spacer()
-                    }
-                } else {
-                    HStack {
-                        Spacer()
-                        Text(msg.text)
-                            .font(.system(size: 13)).foregroundStyle(.white)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .background(BaziTheme.actionBlue)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    }
+        Group {
+            if msg.isWelcome {
+                welcomeCard(msg)
+            } else if msg.isAI {
+                aiRow(msg)
+            } else {
+                HStack {
+                    Spacer()
+                    Text(msg.text)
+                        .font(.system(size: 14)).foregroundStyle(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                        .background(BaziTheme.actionBlue)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .frame(maxWidth: 260, alignment: .trailing)
                 }
             }
         }
     }
 
-    private var typingRow: some View {
-        HStack {
+    /// AI 消息：结构化卡片（有结论标题）或纯文本气泡（降级）
+    private func aiRow(_ msg: Message) -> some View {
+        HStack(alignment: .top, spacing: 8) {
             ZStack {
-                Circle().fill(BaziTheme.actionBlue).frame(width: 32, height: 32)
-                Text("灵").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                Circle().fill(BaziTheme.actionBlue).frame(width: 30, height: 30)
+                Text("灵").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+            }
+            if msg.title != nil {
+                structuredCard(msg)
+            } else {
+                Text(msg.text)
+                    .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .background(BaziTheme.fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .frame(maxWidth: 280, alignment: .leading)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// 结构化回复卡：话题 pill + 结论 + 分点（干支五行色）+ 建议 + 追问 + 免责
+    private func structuredCard(_ msg: Message) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(msg.topic ?? "综合")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
+                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .background(BaziTheme.dayPillarBG).clipShape(Capsule())
+                Spacer()
+                Text(msg.time).font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+            }
+
+            if let title = msg.title {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(Array(msg.points.enumerated()), id: \.offset) { _, point in
+                    HStack(alignment: .top, spacing: 8) {
+                        Circle().fill(BaziTheme.actionBlue).frame(width: 5, height: 5).padding(.top, 7)
+                        Text(attributedGZ(point))
+                            .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                            .lineSpacing(3)
+                    }
+                }
+            }
+
+            if let tip = msg.tip, !tip.isEmpty {
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: "lightbulb")
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
+                    Text(attributedGZ(tip))
+                        .font(.system(size: 13)).foregroundStyle(BaziTheme.actionBlue)
+                        .lineSpacing(2)
+                }
+                .padding(.horizontal, 11).padding(.vertical, 9)
+                .background(BaziTheme.dayPillarBG)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            if !msg.followups.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("继续问")
+                        .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+                    FlowLayout(spacing: 6) {
+                        ForEach(msg.followups, id: \.self) { f in
+                            Button(action: { ask(f) }) {
+                                Text(f)
+                                    .font(.system(size: 12)).foregroundStyle(BaziTheme.actionBlue)
+                                    .padding(.horizontal, 11).padding(.vertical, 5)
+                                    .background(BaziTheme.canvas)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(BaziTheme.actionBlue.opacity(0.35), lineWidth: 1))
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text("命理分析仅供文化参考")
+                .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+        }
+        .padding(14)
+        .frame(maxWidth: 300, alignment: .leading)
+        .background(BaziTheme.fill)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contextMenu {
+            Button(action: { UIPasteboard.general.string = msg.text }) {
+                Label("复制回复", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
+    /// 欢迎卡：灵犀身份 + 命盘摘要 + 话题入口 + 免责
+    private func welcomeCard(_ msg: Message) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(BaziTheme.actionBlue).frame(width: 40, height: 40)
+                    Text("灵").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("灵犀 · AI 命理顾问")
+                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                    Text("阅盘 1000+ · 温和有据")
+                        .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
+                }
+            }
+            Text(msg.text)
+                .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                .lineSpacing(4)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
+                ForEach(topics, id: \.label) { t in
+                    Button(action: { ask(t.question) }) {
+                        Text(t.label)
+                            .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(BaziTheme.canvas)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(BaziTheme.hairline, lineWidth: 1))
+                    }
+                }
+            }
+            Text("命理分析仅供文化参考，不构成决策依据")
+                .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(BaziTheme.fill)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var typingRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ZStack {
+                Circle().fill(BaziTheme.actionBlue).frame(width: 30, height: 30)
+                Text("灵").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
             }
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { _ in
                     Circle().fill(BaziTheme.tertiary).frame(width: 6, height: 6)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
+            .padding(.horizontal, 16).padding(.vertical, 16)
             .background(BaziTheme.fill)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             Spacer()
         }
     }
 
+    // MARK: - 干支五行色（逐字符上色）
+
+    private func attributedGZ(_ s: String) -> AttributedString {
+        var attr = AttributedString()
+        for ch in s {
+            var part = AttributedString(String(ch))
+            if let i = Gan.all.firstIndex(of: String(ch)) {
+                part.foregroundColor = BaziTheme.wuxingColor(Gan.wuxing[i])
+            } else if let i = Zhi.all.firstIndex(of: String(ch)) {
+                part.foregroundColor = BaziTheme.wuxingColor(Zhi.wuxing[i])
+            }
+            attr += part
+        }
+        return attr
+    }
+
     // MARK: - 数据 & 动作
 
     struct Message: Identifiable {
         let id = UUID()
-        let text: String
+        var topic: String?
+        var title: String?
+        var points: [String]
+        var tip: String?
+        var followups: [String]
+        let text: String      // 用户消息原文 / AI 原始回复（含格式标记，供历史上下文与复制）
         let isAI: Bool
+        let isWelcome: Bool
         let time: String
+
+        static func user(_ text: String, _ time: String) -> Message {
+            .init(topic: nil, title: nil, points: [], tip: nil, followups: [],
+                  text: text, isAI: false, isWelcome: false, time: time)
+        }
+        static func aiPlain(_ text: String, _ time: String) -> Message {
+            .init(topic: nil, title: nil, points: [], tip: nil, followups: [],
+                  text: text, isAI: true, isWelcome: false, time: time)
+        }
+        static func aiStructured(topic: String?, title: String, points: [String],
+                                 tip: String?, followups: [String], raw: String, _ time: String) -> Message {
+            .init(topic: topic, title: title, points: points, tip: tip, followups: followups,
+                  text: raw, isAI: true, isWelcome: false, time: time)
+        }
+        static func welcome(_ text: String, _ time: String) -> Message {
+            .init(topic: nil, title: nil, points: [], tip: nil, followups: [],
+                  text: text, isAI: true, isWelcome: true, time: time)
+        }
     }
 
     private func now() -> String {
         let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: Date())
     }
 
-    private func loadGreeting() {
+    private func loadWelcome() {
         guard messages.isEmpty else { return }
         let dm = chart?.dayMaster ?? "庚金"
-        messages.append(Message(text: "您好，我是灵犀。基于您的八字（\(dm)日主），可以为您解读事业、财运、感情与健康，有什么想先了解的吗？", isAI: true, time: now()))
+        let pattern = chart?.pattern ?? "七杀格"
+        messages.append(.welcome("您好，我是灵犀。已读取您的命盘（\(dm)日主 · \(pattern)），可以解读事业、财运、感情与健康——点击下方话题，或直接输入提问。", now()))
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.25)) {
+            proxy.scrollTo("chatBottom", anchor: .bottom)
+        }
     }
 
     private func ask(_ q: String) {
-        appendUser(q)
+        guard !isTyping else { return }
+        messages.append(.user(q, now()))
         requestAI()
     }
 
     private func send() {
         let q = input.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return }
+        guard !q.isEmpty, !isTyping else { return }
         input = ""
-        appendUser(q)
+        messages.append(.user(q, now()))
         requestAI()
     }
 
-    private func appendUser(_ text: String) {
-        messages.append(Message(text: text, isAI: false, time: now()))
-    }
-
-    /// 组装完整上下文（系统提示词 + 历史对话）并请求真实 AI
+    /// 组装完整上下文（系统提示词 + 输出格式要求 + 历史对话）并请求真实 AI
     private func requestAI() {
         guard let last = messages.last, !last.isAI else { return }
         isTyping = true
 
+        let formatPrompt = """
+        【输出格式（严格遵守，各段各占一行）】
+        【话题】从「事业/财运/感情/健康/学业/合盘/综合」中选一个词
+        【结论】一句话直接回应问题，25字内
+        【分析】2-3点，每点独占一行、以数字开头（如 1. ），每点30字内，可引用干支与十神
+        【建议】一句可执行的行动建议，30字内
+        【追问】3个用户最可能接着问的问题，用「|」分隔
+        """
+
         var chatMessages: [AiService.ChatMessage] = []
-        chatMessages.append(AiService.ChatMessage(role: "system", content: AiService.buildSystemPrompt(chart: chart)))
-        for m in messages {
+        chatMessages.append(AiService.ChatMessage(role: "system",
+            content: AiService.buildSystemPrompt(chart: chart) + "\n" + formatPrompt))
+        for m in messages where !m.isWelcome {
             chatMessages.append(AiService.ChatMessage(role: m.isAI ? "assistant" : "user", content: m.text))
         }
 
@@ -192,35 +358,139 @@ struct AdvisorView: View {
             isTyping = false
             switch result {
             case .success(let text):
-                messages.append(Message(text: text, isAI: true, time: now()))
+                messages.append(parseAIReply(text))
             case .failure:
                 // 网络异常兜底：用本地解读，保证离线也能给出回应
-                messages.append(Message(text: localAnswer(userText), isAI: true, time: now()))
+                messages.append(localAnswer(userText))
             }
         }
     }
 
-    /// 本地兜底解读（网络不可用时使用）
-    private func localAnswer(_ q: String) -> String {
+    // MARK: - AI 回复解析
+
+    private func after(_ marker: String, _ line: String) -> String {
+        guard line.hasPrefix(marker) else { return "" }
+        return String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// 去掉模型自行加的「1. 」等编号前缀（卡片用圆点自绘）
+    private func stripBullet(_ s: String) -> String {
+        let prefixes = ["1. ", "1.", "1、", "2. ", "2.", "2、", "3. ", "3.", "3、",
+                        "4. ", "4.", "4、", "• ", "•", "· ", "- "]
+        for p in prefixes where s.hasPrefix(p) {
+            return String(s.dropFirst(p.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return s
+    }
+
+    /// 解析五段式回复；缺【结论】则整段降级为纯文本气泡
+    private func parseAIReply(_ raw: String) -> Message {
+        var topic: String?
+        var title: String?
+        var tip: String?
+        var points: [String] = []
+        var followups: [String] = []
+        var section = ""
+
+        for rawLine in raw.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            if line.hasPrefix("【话题】") {
+                topic = after("【话题】", line); section = ""
+            } else if line.hasPrefix("【结论】") {
+                title = after("【结论】", line); section = ""
+            } else if line.hasPrefix("【分析】") {
+                section = "analysis"
+                let rest = after("【分析】", line)
+                if !rest.isEmpty { points.append(stripBullet(rest)) }
+            } else if line.hasPrefix("【建议】") {
+                tip = after("【建议】", line); section = ""
+            } else if line.hasPrefix("【追问】") {
+                section = ""
+                let rest = after("【追问】", line)
+                followups = rest
+                    .split(whereSeparator: { "|｜、;；".contains($0) })
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+            } else if section == "analysis" {
+                points.append(stripBullet(line))
+            }
+        }
+
+        guard let t = title, !t.isEmpty else { return .aiPlain(raw, now()) }
+        let finalTopic = (topic?.isEmpty == false) ? topic! : "综合"
+        return .aiStructured(topic: finalTopic, title: t, points: points,
+                             tip: tip, followups: followups, raw: raw, now())
+    }
+
+    // MARK: - 本地兜底解读（网络不可用时使用，同样走结构化卡片）
+
+    private func localAnswer(_ q: String) -> Message {
         let dm = chart?.dayMaster ?? "庚金"
         let pattern = chart?.pattern ?? "七杀格"
         let hourShi = chart?.pillars[3].shiShen ?? "食神"
-        let dayun = (chart?.dayun.indices.contains(chart?.currentDayunIndex ?? 0) ?? false)
-            ? chart?.dayun[chart!.currentDayunIndex].ganzhi ?? "—" : "—"
+        let dayunIdx = chart?.currentDayunIndex ?? 0
+        let dayun = (chart?.dayun.indices.contains(dayunIdx) ?? false)
+            ? chart!.dayun[dayunIdx].ganzhi : "—"
+        let t = now()
 
         if q.contains("事业") {
-            return "您\(dm)日主，\(pattern)，时干\(hourShi)透出——宜以专业能力与表达沟通立身，忌硬碰硬。当前大运\(dayun)，先积累作品与口碑，换运后自有跃迁。"
+            return .aiStructured(
+                topic: "事业",
+                title: "宜以专业表达立身，忌硬碰硬",
+                points: [
+                    "\(dm)日主，\(pattern)，时干\(hourShi)透出——表达与专业能力是您的立身之本。",
+                    "现行\(dayun)大运，宜先积累作品与口碑，稳步推进不冒进。",
+                    "换运后机遇显现，届时再放手一搏不迟。"
+                ],
+                tip: "今年宜深耕专业、少争锋，积累比扩张更重要。",
+                followups: ["哪年事业运最强？", "适合创业还是打工？", "如何化解职场压力？"],
+                raw: "【话题】事业\n【结论】宜以专业表达立身，忌硬碰硬\n【分析】1. \(dm)日主，\(pattern)，时干\(hourShi)透出。2. 现行\(dayun)大运，宜先积累作品与口碑。3. 换运后机遇显现，届时再放手一搏。\n【建议】今年宜深耕专业、少争锋，积累比扩张更重要。\n【追问】哪年事业运最强？|适合创业还是打工？|如何化解职场压力？",
+                t)
         }
         if q.contains("财") {
-            return "财气看喜用：宜\(chart?.xiYong.joined(separator: "、") ?? "水、木")方向。您的财运偏稳，靠专业复利而非投机，中年后渐入佳境，切忌为朋友义气破财。"
+            return .aiStructured(
+                topic: "财运",
+                title: "财运偏稳，靠专业复利而非投机",
+                points: [
+                    "财气看喜用：宜往\(chart?.xiYong.joined(separator: "、") ?? "水、木")方向布局。",
+                    "您的财性偏稳，专业积累带来的复利远胜短线投机。",
+                    "中年后渐入佳境，忌为朋友义气破财。"
+                ],
+                tip: "守正财、慎借贷，大额支出避开冲动时刻。",
+                followups: ["哪几年财运最旺？", "适合什么方向投资？", "偏财运如何？"],
+                raw: "【话题】财运\n【结论】财运偏稳，靠专业复利而非投机\n【分析】1. 财气看喜用，宜\(chart?.xiYong.joined(separator: "、") ?? "水、木")方向。2. 财性偏稳，专业复利胜过投机。3. 中年后渐入佳境，忌义气破财。\n【建议】守正财、慎借贷，大额支出避开冲动时刻。\n【追问】哪几年财运最旺？|适合什么方向投资？|偏财运如何？",
+                t)
         }
         if q.contains("感情") || q.contains("婚姻") {
             let peiou = chart?.pillars[2].zhi ?? "辰"
-            return "配偶宫坐\(peiou)，\(chart?.strength ?? "身旺")之人择偶宜看重品性与韧性。晚成更稳，感情中多表达、少隐忍，避免因工作忙碌忽略陪伴。"
+            return .aiStructured(
+                topic: "感情",
+                title: "晚成更稳，多表达少隐忍",
+                points: [
+                    "配偶宫坐\(peiou)，\((chart?.strength ?? "身旺"))之人择偶宜看重品性与韧性。",
+                    "感情节奏偏慢，晚成反而更稳。",
+                    "避免因忙碌忽略陪伴，多表达、少隐忍。"
+                ],
+                tip: "每周留一段两人专属时间，仪式感比贵重礼物更重要。",
+                followups: ["配偶是什么样的人？", "哪年婚缘最旺？", "感情中要注意什么？"],
+                raw: "【话题】感情\n【结论】晚成更稳，多表达少隐忍\n【分析】1. 配偶宫坐\(peiou)，择偶宜看重品性与韧性。2. 感情节奏偏慢，晚成更稳。3. 多表达、少隐忍，勿因忙碌忽略陪伴。\n【建议】每周留一段两人专属时间，仪式感比贵重礼物更重要。\n【追问】配偶是什么样的人？|哪年婚缘最旺？|感情中要注意什么？",
+                t)
         }
         if q.contains("健康") {
-            return "\(dm)日主，请留意与\(chart?.jiShen.joined(separator: "、") ?? "火、土")过旺相关的脏腑负担。建议规律作息、适度有氧，换季前后做一次体检。"
+            return .aiStructured(
+                topic: "健康",
+                title: "规律作息，留意五行偏旺脏腑",
+                points: [
+                    "\(dm)日主，留意与\(chart?.jiShen.joined(separator: "、") ?? "火、土")过旺相关的脏腑负担。",
+                    "建议规律作息、适度有氧，避免长期熬夜。",
+                    "换季前后做一次体检，防患于未然。"
+                ],
+                tip: "从每周三次 30 分钟快走开始，比突击健身更可持续。",
+                followups: ["哪个季节要注意？", "作息上怎么调？", "饮食有何宜忌？"],
+                raw: "【话题】健康\n【结论】规律作息，留意五行偏旺脏腑\n【分析】1. 留意与\(chart?.jiShen.joined(separator: "、") ?? "火、土")过旺相关的脏腑负担。2. 规律作息、适度有氧，避免熬夜。3. 换季前后做一次体检。\n【建议】从每周三次 30 分钟快走开始，比突击健身更可持续。\n【追问】哪个季节要注意？|作息上怎么调？|饮食有何宜忌？",
+                t)
         }
-        return "这个问题我可以结合您的命盘为您详细解读，您可以具体说说想了解哪方面？"
+        return .aiPlain("这个问题我可以结合您的命盘为您详细解读，您可以具体说说想了解哪方面？比如事业、财运、感情或健康。", t)
     }
 }
