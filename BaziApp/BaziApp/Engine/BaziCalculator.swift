@@ -31,6 +31,20 @@ enum BaziCalculator {
         return (jdn + 49) % 60
     }
 
+    /// 儒略日数 JDN → 公历日期（julianDay 的逆运算，供农历反算用）
+    static func dateFromJDN(_ jdn: Int) -> (year: Int, month: Int, day: Int) {
+        var a = jdn + 32044
+        let b = (4 * a + 3) / 146097
+        a -= 146097 * b / 4
+        let c = (4 * a + 3) / 1461
+        a -= 1461 * c / 4
+        let m = (5 * a + 2) / 153
+        let day = a - (153 * m + 2) / 5 + 1
+        let month = m + 3 - 12 * (m / 10)
+        let year = 100 * b + c - 4800 + m / 10
+        return (year, month, day)
+    }
+
     // MARK: - 年柱（立春分界）
 
     /// 立春的近似日期（返回该年立春的月/日，日级精度）
@@ -668,7 +682,8 @@ enum BaziCalculator {
 
     // MARK: - 主入口：完整排盘
 
-    static func calculate(name: String, gender: String, solarDate: String, hour: String, place: String) -> BaziChart {
+    static func calculate(name: String, gender: String, solarDate: String, hour: String, place: String,
+                          useTrueSolar: Bool = true) -> BaziChart {
         // 解析日期
         let dateParts = solarDate.split(separator: "-").compactMap { Int($0) }
         let year = dateParts.count > 0 ? dateParts[0] : 1990
@@ -678,8 +693,8 @@ enum BaziCalculator {
         let hh = hourParts.count > 0 ? hourParts[0] : 12
         let mm = hourParts.count > 1 ? hourParts[1] : 0
 
-        // 真太阳时
-        let lonOffset = longitudeOffset(place: place)
+        // 真太阳时（可关闭：关闭时按北京时间排盘）
+        let lonOffset = useTrueSolar ? longitudeOffset(place: place) : 0
         let trueTotalMinutes = hh * 60 + mm + lonOffset
         let trueHour = (trueTotalMinutes / 60 + 24) % 24
         let trueMinute = (trueTotalMinutes % 60 + 60) % 60

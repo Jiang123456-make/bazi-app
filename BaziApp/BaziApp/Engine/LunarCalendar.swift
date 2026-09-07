@@ -128,6 +128,45 @@ enum LunarCalendar {
         return "\(ganzhiYear)年 \(monthStr)\(dayStr)"
     }
 
+    /// 农历日名（1 → 初一 … 30 → 三十），供滚轮显示
+    static func dayName(_ day: Int) -> String {
+        guard day >= 1 && day <= dayNames.count else { return "" }
+        return dayNames[day - 1]
+    }
+
+    /// 农历日最大数（30）
+    static var dayNameCount: Int { dayNames.count }
+
+    // MARK: - 农历 → 公历
+
+    /// 农历 → 公历（查表反算；仅支持 1900-2099，供排盘页农历输入用）
+    /// 农历闰月跟在对应月份之后（如 1990 闰五月排在五月后）
+    static func lunarToSolar(_ lunarYear: Int, _ lunarMonth: Int, isLeap: Bool, _ lunarDay: Int)
+        -> (year: Int, month: Int, day: Int)? {
+        guard lunarYear >= 1900, lunarYear < 2100,
+              lunarMonth >= 1, lunarMonth <= 12, lunarDay >= 1 else { return nil }
+        let leap = leapMonth(lunarYear)
+        if isLeap, leap != lunarMonth { return nil }
+        let monthLen = isLeap ? leapDays(lunarYear) : monthDays(lunarYear, lunarMonth)
+        guard lunarDay <= monthLen else { return nil }
+
+        // 锚点：1900-01-31 = 农历 1900 年正月初一
+        var offset = 0
+        var y = 1900
+        while y < lunarYear { offset += yearDays(y); y += 1 }
+        var m = 1
+        while m < lunarMonth {
+            offset += monthDays(lunarYear, m)
+            if leap == m { offset += leapDays(lunarYear) }
+            m += 1
+        }
+        if isLeap { offset += monthDays(lunarYear, lunarMonth) }
+        offset += lunarDay - 1
+
+        let solar = BaziCalculator.dateFromJDN(BaziCalculator.julianDay(year: 1900, month: 1, day: 31) + offset)
+        return (solar.year, solar.month, solar.day)
+    }
+
     // MARK: - 生肖（按年柱地支）
 
     static let shengXiaoMap: [String: String] = [
