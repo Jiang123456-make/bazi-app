@@ -8,6 +8,8 @@ struct ChartView: View {
     private let gongWei = ["祖上", "父母", "自己", "子女"]
     private let wuxingOrder = ["木", "火", "土", "金", "水"]
 
+    @State private var term: GlossaryTerm? = nil
+
     private var dayGan: String { String(chart.dayMaster.first ?? "甲") }
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
 
@@ -116,7 +118,7 @@ struct ChartView: View {
             HStack {
                 Text("基本命盘").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                 Spacer()
-                Text("\(chart.dayMaster)日主 · \(chart.strength)")
+                Text("\(chart.dayMaster)日主 · \(chart.strength) · 术语可点按解释")
                     .font(.system(size: 13)).foregroundStyle(BaziTheme.actionBlue)
             }
             .padding(16)
@@ -130,11 +132,12 @@ struct ChartView: View {
                         Text(gongWei[i]).font(.system(size: 9)).foregroundStyle(BaziTheme.tertiary)
                     }
                 }
-                // 2 主星（十神）
+                // 2 主星（十神，点按查词）
                 pzRow("主星") { i in
                     Text(chart.pillars[i].shiShen)
                         .font(.system(size: 13, weight: i == 2 ? .semibold : .regular))
                         .foregroundStyle(i == 2 ? BaziTheme.actionBlue : BaziTheme.secondary)
+                        .onTapGesture { term = Glossary.lookup(chart.pillars[i].shiShen) }
                 }
                 // 3 天干
                 pzRow("天干") { i in
@@ -180,28 +183,32 @@ struct ChartView: View {
                         }
                     }
                 }
-                // 6 星运
+                // 6 星运（点按查十二长生）
                 pzRow("星运") { i in
                     Text(chart.pillars[i].xingYun)
                         .font(.system(size: 12)).foregroundStyle(BaziTheme.ink)
+                        .underline()
+                        .onTapGesture { term = Glossary.lookup(chart.pillars[i].xingYun) }
                 }
                 // 7 自坐
                 pzRow("自坐") { i in
                     Text(chart.pillars[i].ziZuo)
                         .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                 }
-                // 8 空亡
+                // 8 空亡（点按查词）
                 pzRow("空亡") { i in
                     Text(chart.pillars[i].kongWang.isEmpty ? "—" : chart.pillars[i].kongWang)
                         .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                        .onTapGesture { term = Glossary.lookup("空亡") }
                 }
-                // 9 纳音
+                // 9 纳音（点按查词）
                 pzRow("纳音") { i in
                     Text(chart.pillars[i].naYin)
                         .font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
                         .lineLimit(1).minimumScaleFactor(0.8)
+                        .onTapGesture { term = Glossary.lookup(chart.pillars[i].naYin) }
                 }
-                // 10 神煞
+                // 10 神煞（点按查词）
                 pzRow("神煞", isLast: true) { i in
                     let list = chart.pillars[i].shenSha
                     if list.isEmpty {
@@ -216,6 +223,7 @@ struct ChartView: View {
                                     .background(toneColor(s).opacity(0.12))
                                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                                     .lineLimit(1).minimumScaleFactor(0.8)
+                                    .onTapGesture { term = Glossary.lookup(s) }
                             }
                         }
                     }
@@ -324,6 +332,7 @@ struct ChartView: View {
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(BaziTheme.dayColumn)
                     .clipShape(Capsule())
+                    .onTapGesture { term = Glossary.lookup(chart.strength) }
                 Text(chart.strengthNote)
                     .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -346,6 +355,7 @@ struct ChartView: View {
                 .frame(width: 12)
             Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(BaziTheme.ink)
                 .frame(width: 30, alignment: .leading)
+                .onTapGesture { term = Glossary.lookup(title) }
             Text(desc).font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

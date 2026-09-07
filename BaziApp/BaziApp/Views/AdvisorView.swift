@@ -272,6 +272,26 @@ struct AdvisorView: View {
         }
     }
 
+    /// 本地兜底标注条：来源可见 + 一键重试联网
+    private func fallbackBar(_ msg: Message) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wifi.exclamationmark").font(.system(size: 11))
+            Text("网络不可用 · 以上为本地解读").font(.system(size: 11))
+            Spacer()
+            Button { retryAI(for: msg) } label: {
+                Text("重试联网").font(.system(size: 12, weight: .semibold))
+            }
+        }
+        .foregroundStyle(BaziTheme.earth)
+    }
+
+    /// 移除兜底回复，对同一问题重新请求真实 AI
+    private func retryAI(for msg: Message) {
+        guard !isTyping else { return }
+        messages.removeAll { $0.id == msg.id }
+        requestAI()
+    }
+
     /// 欢迎卡：灵犀身份 + 命盘摘要 + 话题入口 + 免责
     private func welcomeCard(_ msg: Message) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -358,6 +378,7 @@ struct AdvisorView: View {
         var followups: [String]
         var historyIndex: Int?     // 对应 AdvisorMemory 历史下标（AI 消息才有，可评价）
         var liked: Int             // 1=有帮助 -1=没帮助 0=未评
+        var isFallback: Bool = false  // 网络失败时的本地兜底回复（可见可重试）
         let text: String           // 用户消息原文 / AI 原始回复（含格式标记）
         let isAI: Bool
         let isWelcome: Bool
@@ -480,18 +501,20 @@ struct AdvisorView: View {
         let userText = last.text
         AiService.chat(messages: chatMessages) { result in
             isTyping = false
-            let replyMessage: Message
+            var m: Message
+            var failed = false
             switch result {
             case .success(let text):
-                replyMessage = parseAIReply(text)
+                m = parseAIReply(text)
             case .failure:
-                // 网络异常兜底：用本地解读，保证离线也能给出回应
-                replyMessage = localAnswer(userText)
+                // 网络异常兜底：用本地解读，保证离线也能给出回应（可见 + 可重试）
+                failed = true
+                m = localAnswer(userText)
             }
             // 落库（本地兜底回复同样入库，会话可延续、可评价）
-            var m = replyMessage
             AdvisorMemory.append(question: userText, answer: m.text, topic: m.topic ?? "综合", forKey: memKey)
             m.historyIndex = AdvisorMemory.history(forKey: memKey).count - 1
+            m.isFallback = failed
             messages.append(m)
         }
     }

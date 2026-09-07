@@ -19,6 +19,30 @@ struct HePanView: View {
         .background(BaziTheme.canvas)
         .navigationTitle("合盘")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { saveResult() } label: {
+                    Text(saved ? "已保存" : "保存")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(saved ? BaziTheme.tertiary : BaziTheme.actionBlue)
+                }
+                .disabled(saved)
+            }
+        }
+    }
+
+    /// 存入合盘记录（我的页可复看）
+    private func saveResult() {
+        guard !saved else { return }
+        HePanHistory.save(HePanEntry(
+            aName: result.a.name,
+            bName: result.b.name,
+            aGanzhi: result.a.pillars.map(\.ganzhi).joined(separator: " "),
+            bGanzhi: result.b.pillars.map(\.ganzhi).joined(separator: " "),
+            zodiacRelation: result.zodiacRelation,
+            dayRelation: result.dayRelation,
+            score: result.score))
+        saved = true
     }
 
     // MARK: - 头部

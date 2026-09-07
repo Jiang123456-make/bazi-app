@@ -6,6 +6,7 @@ struct ReportView: View {
 
     @State private var aiLoading = false
     @State private var aiText: String? = nil
+    @State private var aiFailed = false
 
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
 
@@ -57,8 +58,12 @@ struct ReportView: View {
         AiService.chat(messages: messages) { result in
             aiLoading = false
             switch result {
-            case .success(let text): aiText = text
-            case .failure: aiText = nil   // 保持 nil，卡片显示本地兜底文案
+            case .success(let text):
+                aiText = text
+                aiFailed = false
+            case .failure:
+                aiText = nil       // 保持 nil，卡片显示本地兜底文案
+                aiFailed = true    // 失败可见，可手动重试
             }
         }
     }
@@ -95,7 +100,17 @@ struct ReportView: View {
             HStack {
                 Text("AI 解读").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                 Spacer()
-                if aiLoading { ProgressView().tint(BaziTheme.actionBlue) }
+                if aiLoading {
+                    ProgressView().tint(BaziTheme.actionBlue)
+                } else if let _ = aiText {
+                    Button { loadAI(c) } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 11))
+                            Text("重新生成").font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(BaziTheme.actionBlue)
+                    }
+                }
             }
             if let text = aiText {
                 Text(text)
@@ -106,11 +121,28 @@ struct ReportView: View {
                     .font(.system(size: 13)).foregroundStyle(BaziTheme.tertiary)
                     .lineSpacing(6)
             } else {
+                // 本地兜底 + 失败可见可重试
                 Text(fallbackAI(c))
                     .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
                     .lineSpacing(6)
+                Button {
+                    aiFailed = false
+                    loadAI(c)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: aiFailed ? "wifi.exclamationmark" : "sparkles")
+                            .font(.system(size: 12))
+                        Text(aiFailed ? "联网失败 · 点击重试 AI 详版" : "联网生成 AI 详版解读")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                    }
+                    .foregroundStyle(aiFailed ? BaziTheme.earth : BaziTheme.actionBlue)
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(aiFailed ? BaziTheme.earth.opacity(0.08) : BaziTheme.dayColumn)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
             }
-            Text(aiText == nil && !aiLoading ? "以上为本地命理解读，联网后由灵犀 AI 生成详版 · 追问请到「顾问」" : "由灵犀 AI 生成 · 仅供文化参考")
+            Text(aiText == nil ? "以上为本地命理解读 · 生成后由灵犀 AI 提供 · 仅供文化参考" : "由灵犀 AI 生成 · 仅供文化参考")
                 .font(.system(size: 10)).foregroundStyle(BaziTheme.placeholder)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -329,41 +361,14 @@ struct ReportView: View {
     private var score: Int { 82 }
     private var level: String { "中上" }
 
-    /// 按今年（流年干支）十神生成宜忌与一句话提示
+    /// 按今年（流年干支）十神生成宜忌与一句话提示（与首页「今日指南」共用 TenGodGuide）
     private func shiShenGuide(_ c: BaziChart) -> (yi: [String], ji: [String], tip: String) {
         let ss = c.liunian.first(where: { $0.year == currentYear })?.shiShen ?? ""
-        switch ss {
-        case "七杀":
-            return (["谨慎决策", "直面挑战"], ["硬碰硬", "冲动行事"], "今年七杀主事，压力与机遇并存，宜谋定而后动")
-        case "正官":
-            return (["守规履约", "争取认可"], ["越线行事", "与人争执"], "今年正官主事，规则内行事最顺，口碑是资产")
-        case "正财":
-            return (["稳健理财", "深耕主业"], ["投机冒进", "盲目扩张"], "今年正财主事，细水长流，积少成多")
-        case "偏财":
-            return (["把握机会", "广结善缘"], ["贪多求快", "独占资源"], "今年偏财主事，机会较多，落袋为安")
-        case "食神":
-            return (["创作表达", "休养生息"], ["急功近利", "透支精力"], "今年食神主事，输出与享受并存，宜慢节奏")
-        case "伤官":
-            return (["创意表达", "突破常规"], ["口舌是非", "顶撞权威"], "今年伤官主事，才华外露，谨言可免是非")
-        case "正印":
-            return (["学习充电", "请教长辈"], ["固执己见", "轻信承诺"], "今年正印主事，贵人多助，宜提升自己")
-        case "偏印":
-            return (["深度研究", "独立思考"], ["多疑犹豫", "闭门造车"], "今年偏印主事，直觉敏锐，宜专精一事")
-        case "比肩":
-            return (["团队协作", "强身健体"], ["意气用事", "替人担保"], "今年比肩主事，同辈助力多，也防竞争")
-        case "劫财":
-            return (["守财谨慎", "合作分工"], ["借贷担保", "冲动消费"], "今年劫财主事，破耗较多，钱财宜守")
-        default:
-            return (["顺势而为"], ["逆势强求"], "今年运势平稳，宜稳中求进")
-        }
+        return TenGodGuide.guide(ss)
     }
 
     /// 流年十神 → 吉 / 平 / 滞 档位
     private func fortuneGrade(_ ss: String) -> (String, Color) {
-        switch ss {
-        case "正印", "正官", "正财", "偏财", "食神": return ("吉", BaziTheme.shenshaGood)
-        case "偏印", "比肩": return ("平", BaziTheme.earth)
-        default: return ("滞", BaziTheme.shenshaBad)
-        }
+        TenGodGuide.grade(ss)
     }
 }

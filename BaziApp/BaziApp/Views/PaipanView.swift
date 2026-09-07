@@ -86,7 +86,16 @@ struct PaipanView: View {
             .sheet(isPresented: $showPlacePicker) {
                 PlacePickerView(selection: $place)
             }
-            .onAppear { history = PaipanHistory.load() }
+            .onAppear {
+                history = PaipanHistory.load()
+                if daily == nil {
+                    let f = DateFormatter()
+                    f.dateFormat = "yyyy-MM-dd"
+                    daily = BaziCalculator.calculate(name: "今日", gender: "男",
+                                                     solarDate: f.string(from: Date()),
+                                                     hour: "12:00", place: "北京", useTrueSolar: false)
+                }
+            }
         }
     }
 
@@ -104,6 +113,88 @@ struct PaipanView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 24)
+    }
+
+    // MARK: - 今日指南（今日干支 + 与命主日主的关系 + 宜忌）
+
+    @ViewBuilder
+    private var dailyCard: some View {
+        if let d = daily {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("今日指南").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+                    Spacer()
+                    Text(d.solarDate).font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                }
+
+                HStack(spacing: 10) {
+                    let dg = d.pillars[2].gan
+                    let dz = d.pillars[2].zhi
+                    Text(dg).font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(wuxingOfGan(dg))
+                    Text(dz).font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(wuxingOfZhi(dz))
+                    Text("日 · \(d.pillars[2].naYin)")
+                        .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+                    Spacer()
+                    if let c = chart {
+                        let ss = ShiShen.of(dayGan: String(c.dayMaster.first ?? "甲"), targetGan: dg)
+                        let grade = TenGodGuide.grade(ss)
+                        Text("对您 · \(ss)")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(BaziTheme.dayColumn).clipShape(Capsule())
+                        Text(grade.0)
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(grade.1)
+                    }
+                }
+
+                if let c = chart {
+                    let ss = ShiShen.of(dayGan: String(c.dayMaster.first ?? "甲"), targetGan: d.pillars[2].gan)
+                    let guide = TenGodGuide.guide(ss)
+                    HStack(spacing: 6) {
+                        Text("宜").font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.shenshaGood)
+                        ForEach(guide.yi, id: \.self) { t in
+                            Text(t).font(.system(size: 11))
+                                .foregroundStyle(BaziTheme.shenshaGood)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(BaziTheme.shenshaGoodBG).clipShape(Capsule())
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 6) {
+                        Text("忌").font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.shenshaBad)
+                        ForEach(guide.ji, id: \.self) { t in
+                            Text(t).font(.system(size: 11))
+                                .foregroundStyle(BaziTheme.shenshaBad)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(BaziTheme.shenshaBadBG).clipShape(Capsule())
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    Text(guide.tip)
+                        .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text("完成一次排盘后，这里会显示今日与您命局的关系和宜忌")
+                        .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .baziCard()
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func wuxingOfGan(_ g: String) -> Color {
+        if let i = Gan.all.firstIndex(of: g) { return BaziTheme.wuxingColor(Gan.wuxing[i]) }
+        return BaziTheme.ink
+    }
+
+    private func wuxingOfZhi(_ z: String) -> Color {
+        if let i = Zhi.all.firstIndex(of: z) { return BaziTheme.wuxingColor(Zhi.wuxing[i]) }
+        return BaziTheme.ink
     }
 
     // MARK: - 最近排盘（一键重排）

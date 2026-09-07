@@ -109,12 +109,48 @@ struct ProfileView: View {
                     .baziCard()
                     .padding(.horizontal, 20)
 
-                    // 排盘历史
+                    // 排盘历史（真实记录）
                     VStack(alignment: .leading, spacing: 0) {
                         Text("排盘历史").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink).padding(.bottom, 12)
-                        historyRow("庚午 辛巳 庚辰 壬午", "今天 14:30")
-                        Rectangle().fill(BaziTheme.divider).frame(height: 1)
-                        historyRow("甲子 丙寅 戊申 壬戌", "昨天 09:12")
+                        if ppList.isEmpty {
+                            Text("还没有排盘记录，去「排盘」页生成第一张命盘")
+                                .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                                .padding(.vertical, 10)
+                        } else {
+                            ForEach(Array(ppList.prefix(5).enumerated()), id: \.element.id) { i, e in
+                                if i > 0 { Rectangle().fill(BaziTheme.divider).frame(height: 1) }
+                                historyRow(e.ganzhi, "\(e.name) · \(timeText(e.time))")
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .baziCard()
+                    .padding(.horizontal, 20)
+
+                    // 合盘记录
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("合盘记录").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink).padding(.bottom, 12)
+                        if hpList.isEmpty {
+                            Text("还没有合盘记录，排盘页切换「合盘」模式即可开始")
+                                .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                                .padding(.vertical, 10)
+                        } else {
+                            ForEach(Array(hpList.prefix(5).enumerated()), id: \.element.id) { i, e in
+                                if i > 0 { Rectangle().fill(BaziTheme.divider).frame(height: 1) }
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(e.aName) × \(e.bName)")
+                                            .font(.system(size: 15)).foregroundStyle(BaziTheme.ink)
+                                        Text("\(e.zodiacRelation) · \(e.dayRelation) · \(e.score) 分")
+                                            .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
+                                    }
+                                    Spacer()
+                                    Text(timeText(e.time))
+                                        .font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
+                                }
+                                .frame(height: 52)
+                            }
+                        }
                     }
                     .padding(16)
                     .baziCard()
@@ -127,6 +163,16 @@ struct ProfileView: View {
                         Rectangle().fill(BaziTheme.divider).frame(height: 1)
                         settingRow("隐私政策", icon: "hand.raised")
                         Rectangle().fill(BaziTheme.divider).frame(height: 1)
+                        Button { showClearDialog = true } label: {
+                            HStack {
+                                Image(systemName: "trash").font(.system(size: 16)).foregroundStyle(BaziTheme.secondary).frame(width: 24)
+                                Text("清除我的数据").font(BaziTheme.body()).foregroundStyle(BaziTheme.ink)
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
+                            }
+                            .frame(height: 48)
+                        }
+                        Rectangle().fill(BaziTheme.divider).frame(height: 1)
                         settingRow("关于", icon: "info.circle")
                     }
                     .padding(16)
@@ -136,6 +182,21 @@ struct ProfileView: View {
                 }
             }
             .background(BaziTheme.canvas)
+            .onAppear {
+                ppList = PaipanHistory.load()
+                hpList = HePanHistory.load()
+            }
+            .confirmationDialog("清除哪些数据？（仅存本机，清除后不可恢复）",
+                                isPresented: $showClearDialog, titleVisibility: .visible) {
+                Button("清除排盘历史", role: .destructive) { PaipanHistory.clear(); ppList = [] }
+                Button("清除合盘记录", role: .destructive) { HePanHistory.clear(); hpList = [] }
+                Button("清除顾问记忆与对话", role: .destructive) { AdvisorMemory.resetAll() }
+                Button("全部清除", role: .destructive) {
+                    PaipanHistory.clear(); HePanHistory.clear(); AdvisorMemory.resetAll()
+                    ppList = []; hpList = []
+                }
+                Button("取消", role: .cancel) { }
+            }
         }
     }
 
@@ -166,6 +227,12 @@ struct ProfileView: View {
             Text(time).font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
         }
         .frame(height: 48)
+    }
+
+    private func timeText(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = Calendar.current.isDateInToday(date) ? "今天 HH:mm" : "MM-dd HH:mm"
+        return f.string(from: date)
     }
 
     private func settingRow(_ text: String, icon: String) -> some View {
