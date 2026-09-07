@@ -63,6 +63,36 @@ struct ProfileView: View {
                         .padding(.horizontal, 20)
                     }
 
+                    // 排盘引擎自检（公开历法锚点验证，准确率可查证）
+                    let check = BaziSelfCheck.run()
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("引擎自检").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+                            Spacer()
+                            Text(check.summary)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(check.passed == check.total ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                        }
+                        ForEach(check.items.indices, id: \.self) { i in
+                            let item = check.items[i]
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(item.ok ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                                    .padding(.top, 1)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.name).font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
+                                    Text(item.detail).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                                }
+                            }
+                        }
+                        Text("锚点均为公开可查的历法事实（如开国大典甲子日），通过即证明四柱与农历算法与公认历法一致。")
+                            .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+                    }
+                    .padding(16)
+                    .baziCard()
+                    .padding(.horizontal, 20)
+
                     // 个人信息卡
                     HStack(spacing: 16) {
                         ZStack {

@@ -1,15 +1,17 @@
 import SwiftUI
 import UIKit
 
-/// 屏 4：顾问·对话（真实 AI 接入 + 结构化回复卡；网络异常回退本地解读）
-/// AI 回复按「话题 / 结论 / 分析 / 建议 / 追问」五段式输出，客户端解析渲染为结构化卡片；
-/// 解析失败自动降级为纯文本气泡，保证任何回复都能展示。
+/// 屏 4：顾问·对话（真实 AI 接入 + 结构化回复卡 + 本地记忆系统；网络异常回退本地解读）
+/// 「越用越顺手」：会话按命盘持久化、用户记忆注入提示词、👍/👎 反馈沉淀偏好、简答/详解风格。
 struct AdvisorView: View {
     let chart: BaziChart?
 
     @State private var messages: [Message] = []
     @State private var input = ""
     @State private var isTyping = false
+    @State private var style: AdvisorMemory.Style = AdvisorMemory.style
+    @State private var dislikeFor: Message.ID?
+    @State private var showDislikeDialog = false
 
     /// 欢迎卡话题入口（标签 + 实际发送的问题）
     private let topics: [(label: String, question: String)] = [
@@ -22,14 +24,18 @@ struct AdvisorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 标题
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("顾问")
-                        .font(BaziTheme.largeTitle())
-                        .foregroundStyle(BaziTheme.ink)
-                    Text("灵犀 · 阅盘 1000+ · 命理专家")
-                        .font(BaziTheme.footnote(15))
-                        .foregroundStyle(BaziTheme.secondary)
+                // 标题 + 风格切换
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("顾问")
+                            .font(BaziTheme.largeTitle())
+                            .foregroundStyle(BaziTheme.ink)
+                        Text("灵犀 · 阅盘 1000+ · 命理专家")
+                            .font(BaziTheme.footnote(15))
+                            .foregroundStyle(BaziTheme.secondary)
+                    }
+                    Spacer()
+                    styleMenu
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -51,7 +57,7 @@ struct AdvisorView: View {
                     .onChange(of: isTyping) { _ in scrollToBottom(proxy) }
                 }
 
-                // 输入栏（麦克风按钮未实现，已移除）
+                // 输入栏
                 HStack(spacing: 8) {
                     TextField("输入你的问题…", text: $input)
                         .font(.system(size: 15))
@@ -71,7 +77,44 @@ struct AdvisorView: View {
                 .padding(.vertical, 8)
             }
             .background(BaziTheme.canvas)
-            .onAppear { loadWelcome() }
+            .onAppear { loadContent() }
+            .confirmationDialog("哪里没帮到你？（会记住，下次回答规避）",
+                                isPresented: $showDislikeDialog, titleVisibility: .visible) {
+                ForEach(AdvisorMemory.dislikeReasonOptions, id: \.self) { reason in
+                    Button(reason) {
+                        AdvisorMemory.addDislikeReason(reason)
+                        setLiked(-1, forID: dislikeFor)
+                    }
+                }
+                Button("不评了", role: .cancel) { }
+            }
+        }
+    }
+
+    // MARK: - 头部风格切换
+
+    private var styleMenu: some View {
+        Menu {
+            ForEach(AdvisorMemory.Style.allCases, id: \.self) { s in
+                Button(action: {
+                    AdvisorMemory.style = s
+                    style = s
+                }) {
+                    if style == s {
+                        Label(s.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(s.rawValue)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 12))
+                Text(style.rawValue).font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(BaziTheme.actionBlue)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(BaziTheme.dayPillarBG).clipShape(Capsule())
         }
     }
 
@@ -119,7 +162,7 @@ struct AdvisorView: View {
         }
     }
 
-    /// 结构化回复卡：话题 pill + 结论 + 分点（干支五行色）+ 建议 + 追问 + 免责
+    /// 结构化回复卡：话题 pill + 结论 + 分点（干支五行色）+ 建议 + 追问 + 反馈 + 免责
     private func structuredCard(_ msg: Message) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -179,6 +222,10 @@ struct AdvisorView: View {
                 }
             }
 
+            if msg.historyIndex != nil {
+                feedbackRow(msg)
+            }
+
             Text("命理分析仅供文化参考")
                 .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
         }
@@ -193,6 +240,38 @@ struct AdvisorView: View {
         }
     }
 
+    /// 反馈行：👍 有帮助 / 👎 没帮助（沉淀为偏好，越用越顺手）
+    private func feedbackRow(_ msg: Message) -> some View {
+        HStack(spacing: 16) {
+            Button {
+                setLiked(msg.liked == 1 ? 0 : 1, forID: msg.id)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: msg.liked == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                        .font(.system(size: 12))
+                    Text("有帮助").font(.system(size: 11))
+                }
+                .foregroundStyle(msg.liked == 1 ? BaziTheme.actionBlue : BaziTheme.tertiary)
+            }
+            Button {
+                if msg.liked == -1 {
+                    setLiked(0, forID: msg.id)
+                } else {
+                    dislikeFor = msg.id
+                    showDislikeDialog = true
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: msg.liked == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                        .font(.system(size: 12))
+                    Text("没帮助").font(.system(size: 11))
+                }
+                .foregroundStyle(msg.liked == -1 ? BaziTheme.shenshaBad : BaziTheme.tertiary)
+            }
+            Spacer()
+        }
+    }
+
     /// 欢迎卡：灵犀身份 + 命盘摘要 + 话题入口 + 免责
     private func welcomeCard(_ msg: Message) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -204,7 +283,7 @@ struct AdvisorView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("灵犀 · AI 命理顾问")
                         .font(.system(size: 16, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-                    Text("阅盘 1000+ · 温和有据")
+                    Text("阅盘 1000+ · 记忆已开启 · 仅存本机")
                         .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                 }
             }
@@ -277,26 +356,32 @@ struct AdvisorView: View {
         var points: [String]
         var tip: String?
         var followups: [String]
-        let text: String      // 用户消息原文 / AI 原始回复（含格式标记，供历史上下文与复制）
+        var historyIndex: Int?     // 对应 AdvisorMemory 历史下标（AI 消息才有，可评价）
+        var liked: Int             // 1=有帮助 -1=没帮助 0=未评
+        let text: String           // 用户消息原文 / AI 原始回复（含格式标记）
         let isAI: Bool
         let isWelcome: Bool
-        let time: String
+        var time: String
 
         static func user(_ text: String, _ time: String) -> Message {
             .init(topic: nil, title: nil, points: [], tip: nil, followups: [],
+                  historyIndex: nil, liked: 0,
                   text: text, isAI: false, isWelcome: false, time: time)
         }
         static func aiPlain(_ text: String, _ time: String) -> Message {
             .init(topic: nil, title: nil, points: [], tip: nil, followups: [],
+                  historyIndex: nil, liked: 0,
                   text: text, isAI: true, isWelcome: false, time: time)
         }
         static func aiStructured(topic: String?, title: String, points: [String],
                                  tip: String?, followups: [String], raw: String, _ time: String) -> Message {
             .init(topic: topic, title: title, points: points, tip: tip, followups: followups,
+                  historyIndex: nil, liked: 0,
                   text: raw, isAI: true, isWelcome: false, time: time)
         }
         static func welcome(_ text: String, _ time: String) -> Message {
             .init(topic: nil, title: nil, points: [], tip: nil, followups: [],
+                  historyIndex: nil, liked: 0,
                   text: text, isAI: true, isWelcome: true, time: time)
         }
     }
@@ -305,17 +390,50 @@ struct AdvisorView: View {
         let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: Date())
     }
 
-    private func loadWelcome() {
+    private func recordTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = Calendar.current.isDateInToday(date) ? "HH:mm" : "MM-dd HH:mm"
+        return f.string(from: date)
+    }
+
+    /// 首次进入：欢迎卡 + 恢复该命盘的历史会话（跨启动延续上下文）
+    private func loadContent() {
         guard messages.isEmpty else { return }
+        let key = AdvisorMemory.chartKey(chart)
+        let hist = AdvisorMemory.history(forKey: key)
         let dm = chart?.dayMaster ?? "庚金"
         let pattern = chart?.pattern ?? "七杀格"
-        messages.append(.welcome("您好，我是灵犀。已读取您的命盘（\(dm)日主 · \(pattern)），可以解读事业、财运、感情与健康——点击下方话题，或直接输入提问。", now()))
+
+        var intro = "您好，我是灵犀。已读取您的命盘（\(dm)日主 · \(pattern)），可以解读事业、财运、感情与健康——点击下方话题，或直接输入提问。"
+        if !hist.isEmpty {
+            intro += "\n我们已聊过 \(hist.count) 次，接着上次继续。"
+        }
+        messages.append(.welcome(intro, now()))
+
+        for (i, r) in hist.enumerated() {
+            messages.append(.user(r.question, recordTime(r.time)))
+            var m = parseAIReply(r.answer)
+            m.historyIndex = i
+            m.liked = r.liked
+            m.time = recordTime(r.time)
+            messages.append(m)
+        }
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         withAnimation(.easeOut(duration: 0.25)) {
             proxy.scrollTo("chatBottom", anchor: .bottom)
         }
+    }
+
+    /// 反馈落库（同步内存中的消息状态）
+    private func setLiked(_ liked: Int, forID id: Message.ID?) {
+        guard let id,
+              let i = messages.firstIndex(where: { $0.id == id }),
+              let hIdx = messages[i].historyIndex else { return }
+        let key = AdvisorMemory.chartKey(chart)
+        AdvisorMemory.setFeedback(liked, at: hIdx, forKey: key)
+        messages[i].liked = liked
     }
 
     private func ask(_ q: String) {
@@ -332,7 +450,7 @@ struct AdvisorView: View {
         requestAI()
     }
 
-    /// 组装完整上下文（系统提示词 + 输出格式要求 + 历史对话）并请求真实 AI
+    /// 组装完整上下文（系统提示词 + 用户记忆 + 风格 + 输出格式 + 历史对话）并请求真实 AI
     private func requestAI() {
         guard let last = messages.last, !last.isAI else { return }
         isTyping = true
@@ -346,9 +464,15 @@ struct AdvisorView: View {
         【追问】3个用户最可能接着问的问题，用「|」分隔
         """
 
+        let memKey = AdvisorMemory.chartKey(chart)
+        var systemContent = AiService.buildSystemPrompt(chart: chart)
+        let mem = AdvisorMemory.memorySummary(forKey: memKey)
+        if !mem.isEmpty { systemContent += "\n" + mem }
+        systemContent += "\n" + AdvisorMemory.stylePrompt
+        systemContent += "\n" + formatPrompt
+
         var chatMessages: [AiService.ChatMessage] = []
-        chatMessages.append(AiService.ChatMessage(role: "system",
-            content: AiService.buildSystemPrompt(chart: chart) + "\n" + formatPrompt))
+        chatMessages.append(AiService.ChatMessage(role: "system", content: systemContent))
         for m in messages where !m.isWelcome {
             chatMessages.append(AiService.ChatMessage(role: m.isAI ? "assistant" : "user", content: m.text))
         }
@@ -356,13 +480,19 @@ struct AdvisorView: View {
         let userText = last.text
         AiService.chat(messages: chatMessages) { result in
             isTyping = false
+            let replyMessage: Message
             switch result {
             case .success(let text):
-                messages.append(parseAIReply(text))
+                replyMessage = parseAIReply(text)
             case .failure:
                 // 网络异常兜底：用本地解读，保证离线也能给出回应
-                messages.append(localAnswer(userText))
+                replyMessage = localAnswer(userText)
             }
+            // 落库（本地兜底回复同样入库，会话可延续、可评价）
+            var m = replyMessage
+            AdvisorMemory.append(question: userText, answer: m.text, topic: m.topic ?? "综合", forKey: memKey)
+            m.historyIndex = AdvisorMemory.history(forKey: memKey).count - 1
+            messages.append(m)
         }
     }
 
