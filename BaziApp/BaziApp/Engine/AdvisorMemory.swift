@@ -119,9 +119,9 @@ enum AdvisorMemory {
     static var stylePrompt: String {
         switch style {
         case .brief:
-            return "回答长度：用户偏好简答，【结论】+【分析】每点 20 字内，总长 80 字内。"
+            return "回答长度：用户偏好简答，【分析】2-3 点、每点 40 字内，总长 150 字左右。"
         case .detailed:
-            return "回答长度：用户偏好详解，分析充分但不冗长，总长 200 字内。"
+            return "回答长度：用户偏好详解，【分析】4-6 点、每点 60-80 字，逐点引用干支、十神与生克关系作为依据，总长 400-600 字。宁可详细，不要笼统。"
         }
     }
 

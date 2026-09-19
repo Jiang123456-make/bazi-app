@@ -12,6 +12,7 @@ struct AdvisorView: View {
     @State private var style: AdvisorMemory.Style = AdvisorMemory.style
     @State private var dislikeFor: Message.ID?
     @State private var showDislikeDialog = false
+    @FocusState private var inputFocused: Bool
 
     /// 欢迎卡话题入口（标签 + 实际发送的问题）
     private let topics: [(label: String, question: String)] = [
@@ -55,12 +56,15 @@ struct AdvisorView: View {
                     }
                     .onChange(of: messages.count) { _ in scrollToBottom(proxy) }
                     .onChange(of: isTyping) { _ in scrollToBottom(proxy) }
+                    .scrollDismissesKeyboard(.interactively)
+                    .onTapGesture { inputFocused = false }
                 }
 
                 // 输入栏
                 HStack(spacing: 8) {
                     TextField("输入你的问题…", text: $input)
                         .font(.system(size: 15))
+                        .focused($inputFocused)
                         .padding(.horizontal, 16).padding(.vertical, 11)
                         .background(BaziTheme.fill)
                         .clipShape(Capsule())
@@ -78,6 +82,12 @@ struct AdvisorView: View {
             }
             .background(BaziTheme.canvas)
             .onAppear { loadContent() }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { inputFocused = false }
+                }
+            }
             .confirmationDialog("哪里没帮到你？（会记住，下次回答规避）",
                                 isPresented: $showDislikeDialog, titleVisibility: .visible) {
                 ForEach(AdvisorMemory.dislikeReasonOptions, id: \.self) { reason in
@@ -480,9 +490,9 @@ struct AdvisorView: View {
         【输出格式（严格遵守，各段各占一行）】
         全程纯文本：禁止使用任何 Markdown 符号（不要 **、##、- 列表符、反引号），直接输出汉字内容
         【话题】从「事业/财运/感情/健康/学业/合盘/综合」中选一个词
-        【结论】一句话直接回应问题，25字内
-        【分析】2-4点，每点独占一行、以数字开头（如 1. ），每点60字内，必须引用具体干支或十神作为依据
-        【建议】一句可执行的行动建议，40字内
+        【结论】一句话直接回应问题，40字内
+        【分析】4-6点，每点独占一行、以数字开头（如 1. ），每点80字内；每点都必须引用具体干支、十神或生克关系作为依据，先依据后判断；运用系统提示词里的解读知识，但要用命盘信息具体化，禁止照抄
+        【建议】一到两句可执行的行动建议，60字内
         【追问】3个用户最可能接着问的问题，用「|」分隔
         """
 
