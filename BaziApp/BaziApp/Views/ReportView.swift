@@ -53,13 +53,13 @@ struct ReportView: View {
         aiLoading = true
         let messages: [AiService.ChatMessage] = [
             AiService.ChatMessage(role: "system", content: AiService.buildSystemPrompt(chart: c)),
-            AiService.ChatMessage(role: "user", content: "请为我的八字命盘做一段综合命理解读（性格、事业、财运、感情、健康），200 字以内，分点清晰。")
+            AiService.ChatMessage(role: "user", content: "请为我的八字命盘做一段综合命理解读（性格、事业、财运、感情、健康），200 字以内，分点清晰，纯文本输出（禁用 Markdown 符号）。")
         ]
         AiService.chat(messages: messages) { result in
             aiLoading = false
             switch result {
             case .success(let text):
-                aiText = text
+                aiText = AIClean.text(text)   // 去 Markdown 修饰，卡片纯文本自绘
                 aiFailed = false
             case .failure:
                 aiText = nil       // 保持 nil，卡片显示本地兜底文案
@@ -132,18 +132,44 @@ struct ReportView: View {
                 }
             }
             if let text = aiText {
-                Text(text)
-                    .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
-                    .lineSpacing(6)
+                // 问真风正文块：金色淡底 + 金竖线引导，纯文本（已过 AIClean 清理）
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle()
+                        .fill(BaziTheme.actionBlue)
+                        .frame(width: 3)
+                        .clipShape(Capsule())
+                    Text(text)
+                        .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                        .lineSpacing(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(BaziTheme.goldSoft)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else if aiLoading {
-                Text("灵犀正在结合您的命盘进行解读…")
-                    .font(.system(size: 13)).foregroundStyle(BaziTheme.tertiary)
-                    .lineSpacing(6)
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle().fill(BaziTheme.divider).frame(width: 3).clipShape(Capsule())
+                    Text("灵犀正在结合您的命盘进行解读…")
+                        .font(.system(size: 13)).foregroundStyle(BaziTheme.tertiary)
+                        .lineSpacing(6)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(BaziTheme.fill)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
                 // 本地兜底 + 失败可见可重试
-                Text(fallbackAI(c))
-                    .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
-                    .lineSpacing(6)
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle().fill(BaziTheme.divider).frame(width: 3).clipShape(Capsule())
+                    Text(fallbackAI(c))
+                        .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                        .lineSpacing(6)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(BaziTheme.fill)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Button {
                     aiFailed = false
                     loadAI(c)

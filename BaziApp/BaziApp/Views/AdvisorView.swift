@@ -478,6 +478,7 @@ struct AdvisorView: View {
 
         let formatPrompt = """
         【输出格式（严格遵守，各段各占一行）】
+        全程纯文本：禁止使用任何 Markdown 符号（不要 **、##、- 列表符、反引号），直接输出汉字内容
         【话题】从「事业/财运/感情/健康/学业/合盘/综合」中选一个词
         【结论】一句话直接回应问题，25字内
         【分析】2-3点，每点独占一行、以数字开头（如 1. ），每点30字内，可引用干支与十神
@@ -523,7 +524,7 @@ struct AdvisorView: View {
 
     private func after(_ marker: String, _ line: String) -> String {
         guard line.hasPrefix(marker) else { return "" }
-        return String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
+        return AIClean.text(String(line.dropFirst(marker.count)))
     }
 
     /// 去掉模型自行加的「1. 」等编号前缀（卡片用圆点自绘）
@@ -546,7 +547,8 @@ struct AdvisorView: View {
         var section = ""
 
         for rawLine in raw.components(separatedBy: .newlines) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            // 先清行内 Markdown 修饰，模型加 **【话题】** 之类也能命中
+            let line = AIClean.text(rawLine)
             guard !line.isEmpty else { continue }
             if line.hasPrefix("【话题】") {
                 topic = after("【话题】", line); section = ""
@@ -570,7 +572,7 @@ struct AdvisorView: View {
             }
         }
 
-        guard let t = title, !t.isEmpty else { return .aiPlain(raw, now()) }
+        guard let t = title, !t.isEmpty else { return .aiPlain(AIClean.stripSectionTags(raw), now()) }
         let finalTopic = (topic?.isEmpty == false) ? topic! : "综合"
         return .aiStructured(topic: finalTopic, title: t, points: points,
                              tip: tip, followups: followups, raw: raw, now())
