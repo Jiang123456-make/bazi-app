@@ -36,17 +36,29 @@ enum KnowledgeStore {
 
     // MARK: - 检索
 
-    /// 从命盘派生检索标签：格局、旺衰、喜用五行、十神、神煞、当前大运十神
+    /// 从命盘派生检索标签：格局、旺衰、喜用五行、透干十神（年/月/时干）、神煞、当前大运十神
     static func chartTags(_ c: BaziChart) -> Set<String> {
         var tags = Set<String>()
-        let keywords = ["伤官", "食神", "七杀", "正官", "正印", "偏印", "正财", "偏财", "比肩", "劫财", "食神制杀"]
-        for kw in keywords where c.pattern.contains(kw) { tags.insert(kw) }
+        // 格局（含复合格局：食神制杀 → 七杀格口径）
+        let ganShi = ["正官", "七杀", "正印", "偏印", "正财", "偏财", "食神", "伤官"]
+        for kw in ganShi where c.pattern.contains(kw) {
+            tags.insert(kw)
+            tags.insert(kw + "格")
+        }
+        if c.pattern.contains("制杀") || c.pattern.contains("化杀") { tags.insert("七杀格") }
+        // 旺衰
         if c.strength.contains("弱") { tags.insert("身弱") }
         if c.strength.contains("旺") { tags.insert("身旺") }
+        // 喜用神五行
         c.xiYong.forEach { tags.insert($0) }
-        for p in c.pillars { tags.insert(p.shiShen) }
+        // 透干十神（年/月/时干——透干者有力，是解读重点；不取全部藏干避免稀释）
+        for (i, p) in c.pillars.enumerated() where i != 2 {
+            tags.insert(p.shiShen)
+        }
+        // 神煞
         for s in c.goodShenSha { tags.insert(s) }
         for s in c.badShenSha { tags.insert(s) }
+        // 当前大运十神
         if c.dayun.indices.contains(c.currentDayunIndex) {
             tags.insert(c.dayun[c.currentDayunIndex].shiShen)
         }
@@ -54,7 +66,7 @@ enum KnowledgeStore {
     }
 
     /// 检索相关条目：命盘特征命中 + 问题关键词命中 + 恒选条目，按相关度排序，限量
-    static func relevant(chart: BaziChart?, query: String = "", limit: Int = 10) -> [Entry] {
+    static func relevant(chart: BaziChart?, query: String = "", limit: Int = 12) -> [Entry] {
         guard !entries.isEmpty else { return [] }
         var t = Set<String>()
         if let c = chart {
@@ -81,7 +93,7 @@ enum KnowledgeStore {
     }
 
     /// 渲染成提示词块
-    static func promptBlock(for chart: BaziChart?, query: String = "", limit: Int = 10) -> String {
+    static func promptBlock(for chart: BaziChart?, query: String = "", limit: Int = 12) -> String {
         let items = relevant(chart: chart, query: query, limit: limit)
         guard !items.isEmpty else { return "" }
         var lines = ["可运用的解读知识（务必结合命盘具体化表达，禁止照抄原文）："]
@@ -89,5 +101,14 @@ enum KnowledgeStore {
             lines.append("【\(e.topic)】\(e.detail)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// 取一条最相关知识的首句，作为本地兜底解读的「专业洞察」行
+    static func insightLine(chart: BaziChart?, query: String) -> String? {
+        let items = relevant(chart: chart, query: query, limit: 4)
+        guard let e = items.first(where: { !$0.always }) ?? items.first else { return nil }
+        let d = e.detail
+        guard let idx = d.firstIndex(of: "。") else { return d }
+        return String(d[..<idx]) + "。"
     }
 }

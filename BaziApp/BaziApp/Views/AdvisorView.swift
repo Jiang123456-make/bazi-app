@@ -579,73 +579,108 @@ struct AdvisorView: View {
     }
 
     // MARK: - 本地兜底解读（网络不可用时使用，同样走结构化卡片）
+    // 知识库驱动：命盘事实 + KnowledgeStore 专业洞察行，离线也有深度
 
     private func localAnswer(_ q: String) -> Message {
-        let dm = chart?.dayMaster ?? "庚金"
-        let pattern = chart?.pattern ?? "七杀格"
-        let hourShi = chart?.pillars[3].shiShen ?? "食神"
-        let dayunIdx = chart?.currentDayunIndex ?? 0
-        let dayun = (chart?.dayun.indices.contains(dayunIdx) ?? false)
-            ? chart!.dayun[dayunIdx].ganzhi : "—"
         let t = now()
+        guard let c = chart else {
+            return .aiPlain("请先在排盘页创建命盘，我就能结合您的八字详细解读了。", t)
+        }
 
-        if q.contains("事业") {
-            return .aiStructured(
-                topic: "事业",
-                title: "宜以专业表达立身，忌硬碰硬",
-                points: [
-                    "\(dm)日主，\(pattern)，时干\(hourShi)透出——表达与专业能力是您的立身之本。",
-                    "现行\(dayun)大运，宜先积累作品与口碑，稳步推进不冒进。",
-                    "换运后机遇显现，届时再放手一搏不迟。"
-                ],
-                tip: "今年宜深耕专业、少争锋，积累比扩张更重要。",
-                followups: ["哪年事业运最强？", "适合创业还是打工？", "如何化解职场压力？"],
-                raw: "【话题】事业\n【结论】宜以专业表达立身，忌硬碰硬\n【分析】1. \(dm)日主，\(pattern)，时干\(hourShi)透出。2. 现行\(dayun)大运，宜先积累作品与口碑。3. 换运后机遇显现，届时再放手一搏。\n【建议】今年宜深耕专业、少争锋，积累比扩张更重要。\n【追问】哪年事业运最强？|适合创业还是打工？|如何化解职场压力？",
-                t)
+        // 话题分类
+        let topic: String
+        if q.contains("事业") || q.contains("工作") || q.contains("职业") || q.contains("创业") || q.contains("跳槽") {
+            topic = "事业"
+        } else if q.contains("财") || q.contains("钱") || q.contains("投资") {
+            topic = "财运"
+        } else if q.contains("感情") || q.contains("婚姻") || q.contains("恋爱") || q.contains("对象") || q.contains("合婚") {
+            topic = "感情"
+        } else if q.contains("健康") || q.contains("身体") || q.contains("睡眠") {
+            topic = "健康"
+        } else if q.contains("大运") || q.contains("流年") || q.contains("运势") || q.contains("今年") {
+            topic = "大运"
+        } else {
+            topic = "综合"
         }
-        if q.contains("财") {
-            return .aiStructured(
-                topic: "财运",
-                title: "财运偏稳，靠专业复利而非投机",
-                points: [
-                    "财气看喜用：宜往\(chart?.xiYong.joined(separator: "、") ?? "水、木")方向布局。",
-                    "您的财性偏稳，专业积累带来的复利远胜短线投机。",
-                    "中年后渐入佳境，忌为朋友义气破财。"
-                ],
-                tip: "守正财、慎借贷，大额支出避开冲动时刻。",
-                followups: ["哪几年财运最旺？", "适合什么方向投资？", "偏财运如何？"],
-                raw: "【话题】财运\n【结论】财运偏稳，靠专业复利而非投机\n【分析】1. 财气看喜用，宜\(chart?.xiYong.joined(separator: "、") ?? "水、木")方向。2. 财性偏稳，专业复利胜过投机。3. 中年后渐入佳境，忌义气破财。\n【建议】守正财、慎借贷，大额支出避开冲动时刻。\n【追问】哪几年财运最旺？|适合什么方向投资？|偏财运如何？",
-                t)
+
+        // 命盘事实
+        let dm = c.dayMaster
+        let pattern = c.pattern
+        let shiGan = c.pillars.count > 3 ? c.pillars[3].shiShen : "食神"
+        let dayunIdx = c.currentDayunIndex
+        let dy = c.dayun.indices.contains(dayunIdx) ? c.dayun[dayunIdx] : nil
+        let dayunGz = dy?.ganzhi ?? "—"
+        let dayunShi = dy?.shiShen ?? "—"
+        let dayunYear = dy.map { "\($0.startYear)-\($0.endYear)" } ?? "—"
+        let xiyong = c.xiYong.joined(separator: "、")
+        let rizhi = c.pillars.count > 2 ? c.pillars[2].zhi : "—"
+        // 专业洞察行（知识库首条非恒选条目的首句）
+        let insight = KnowledgeStore.insightLine(chart: c, query: q)
+
+        // 各话题组装
+        var title: String
+        var points: [String]
+        var tip: String
+        var followups: [String]
+
+        switch topic {
+        case "事业":
+            title = "宜走\(xiyong)向赛道，以专业立身"
+            points = [
+                "\(dm)日主，\(pattern)，时干\(shiGan)透出——\(shiGan)的领域是您的表达出口，也是事业杠杆。",
+            ]
+            if let ins = insight { points.append("专业口径：\(ins)") }
+            points.append("现行\(dayunGz)大运（\(dayunYear)，十神为\(dayunShi)），交脱前后一年最不稳，稳字当头、换运后再放量。")
+            tip = "今年宜深耕专业、少争锋；把批判力转化成作品，而不是消耗在争论里。"
+            followups = ["哪年事业运最强？", "适合创业还是打工？", "行业方向怎么选？"]
+        case "财运":
+            title = "财运靠\(c.strength.contains("弱") ? "蓄力复利" : "进取落袋")，不靠投机"
+            points = [
+                "身\(c.strength.contains("弱") ? "弱" : "旺")看财：\(c.strength.contains("弱") ? "身弱财旺是看得见接不住，先立印（能力与资源）再图财" : "身旺能担财，可进取但防比劫分利")。",
+            ]
+            if let ins = insight { points.append("专业口径：\(ins)") }
+            points.append("喜用为\(xiyong)，行业五行宜往此方向布局；忌神\(c.jiShen.joined(separator: "、"))方向的钱赚得辛苦。")
+            tip = "守正财、慎借贷担保；大额支出避开情绪冲动的时刻。"
+            followups = ["哪几年财运最旺？", "适合什么方向投资？", "适合合伙吗？"]
+        case "感情":
+            title = "感情看倾向不看判决，晚成反而更稳"
+            points = [
+                "夫妻宫坐\(rizhi)，日主\(dm)、\(c.strength)——择偶宜看重品性与韧性，而非一时激情。",
+            ]
+            if let ins = insight { points.append("专业口径：\(ins)") }
+            points.append("配偶星要靠岁运引出，名分没落点不等于不爱；那几年是各自长自己的时间，不是等待的时间。")
+            tip = "每周留一段两人专属时间；多表达、少隐忍，仪式感比贵重礼物更重要。"
+            followups = ["配偶是什么样的人？", "哪年婚缘最旺？", "我们合不合？"]
+        case "健康":
+            title = "规律作息，留意\(c.jiShen.joined(separator: "、"))过旺的负担"
+            points = [
+                "\(dm)日主，忌神\(c.jiShen.joined(separator: "、"))过旺——象上对应相关脏腑与情绪负担，属结构倾向非诊断。",
+            ]
+            if let ins = insight { points.append("专业口径：\(ins)") }
+            points.append("命理只谈状态倾向，健康问题请遵医嘱、定期复查；规律作息与适度运动永远在第一顺位。")
+            tip = "从每周三次 30 分钟快走开始，比突击健身更可持续。"
+            followups = ["哪个季节要注意？", "作息上怎么调？", "情绪内耗怎么解？"]
+        case "大运":
+            title = "大运管十年之势，流年管当年之事"
+            points = [
+                "现行\(dayunGz)大运（\(dayunYear)），十神为\(dayunShi)——这是这十年的主旋律，帮扶用神则顺、引动忌神则滞。",
+            ]
+            if let ins = insight { points.append("专业口径：\(ins)") }
+            points.append("交脱大运前后一年最不稳（换运如换天），心境动荡属正常，不作断语；伏吟年定不下来也不代表不要。")
+            tip = "看十年做布局，看当年做动作；换运年守成过渡，不重仓押注。"
+            followups = ["换运是在哪一年？", "下一步大运如何？", "今年流年吉凶？"]
+        default:
+            title = "从\(pattern)看，宜先立心再谋事"
+            points = [
+                "\(dm)日主，\(pattern)，喜用\(xiyong)——解读一切问题的底层是这组结构。",
+            ]
+            if let ins = insight { points.append("专业口径：\(ins)") }
+            points.append("现行\(dayunGz)大运，用神方向的事宜顺势推进，忌神方向的事宜放缓观察。")
+            tip = "命理给方向不给答案；把问题落到具体领域（事业/财运/感情/健康），解读会更准。"
+            followups = ["我的事业方向？", "财运节奏如何？", "感情模式是什么？"]
         }
-        if q.contains("感情") || q.contains("婚姻") {
-            let peiou = chart?.pillars[2].zhi ?? "辰"
-            return .aiStructured(
-                topic: "感情",
-                title: "晚成更稳，多表达少隐忍",
-                points: [
-                    "配偶宫坐\(peiou)，\((chart?.strength ?? "身旺"))之人择偶宜看重品性与韧性。",
-                    "感情节奏偏慢，晚成反而更稳。",
-                    "避免因忙碌忽略陪伴，多表达、少隐忍。"
-                ],
-                tip: "每周留一段两人专属时间，仪式感比贵重礼物更重要。",
-                followups: ["配偶是什么样的人？", "哪年婚缘最旺？", "感情中要注意什么？"],
-                raw: "【话题】感情\n【结论】晚成更稳，多表达少隐忍\n【分析】1. 配偶宫坐\(peiou)，择偶宜看重品性与韧性。2. 感情节奏偏慢，晚成更稳。3. 多表达、少隐忍，勿因忙碌忽略陪伴。\n【建议】每周留一段两人专属时间，仪式感比贵重礼物更重要。\n【追问】配偶是什么样的人？|哪年婚缘最旺？|感情中要注意什么？",
-                t)
-        }
-        if q.contains("健康") {
-            return .aiStructured(
-                topic: "健康",
-                title: "规律作息，留意五行偏旺脏腑",
-                points: [
-                    "\(dm)日主，留意与\(chart?.jiShen.joined(separator: "、") ?? "火、土")过旺相关的脏腑负担。",
-                    "建议规律作息、适度有氧，避免长期熬夜。",
-                    "换季前后做一次体检，防患于未然。"
-                ],
-                tip: "从每周三次 30 分钟快走开始，比突击健身更可持续。",
-                followups: ["哪个季节要注意？", "作息上怎么调？", "饮食有何宜忌？"],
-                raw: "【话题】健康\n【结论】规律作息，留意五行偏旺脏腑\n【分析】1. 留意与\(chart?.jiShen.joined(separator: "、") ?? "火、土")过旺相关的脏腑负担。2. 规律作息、适度有氧，避免熬夜。3. 换季前后做一次体检。\n【建议】从每周三次 30 分钟快走开始，比突击健身更可持续。\n【追问】哪个季节要注意？|作息上怎么调？|饮食有何宜忌？",
-                t)
-        }
-        return .aiPlain("这个问题我可以结合您的命盘为您详细解读，您可以具体说说想了解哪方面？比如事业、财运、感情或健康。", t)
+
+        let raw = "【话题】\(topic)\n【结论】\(title)\n【分析】" + points.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: " ") + "\n【建议】\(tip)\n【追问】\(followups.joined(separator: "|"))"
+        return .aiStructured(topic: topic, title: title, points: points, tip: tip, followups: followups, raw: raw, t)
     }
 }
