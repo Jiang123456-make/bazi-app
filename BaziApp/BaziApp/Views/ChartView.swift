@@ -9,53 +9,120 @@ struct ChartView: View {
     private let wuxingOrder = ["木", "火", "土", "金", "水"]
 
     @State private var term: GlossaryTerm? = nil
+    @State private var activeTab = "基本排盘"
 
     private var dayGan: String { String(chart.dayMaster.first ?? "甲") }
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
 
+    /// 页签（锚点滚动）：第四页签用「经典论述」替代设计板的 AI 解读（AI 卡在报告页）
+    private let tabs: [(String, String)] = [
+        ("基本信息", "sec-basic"), ("基本排盘", "sec-mingpan"),
+        ("大运流年", "sec-dayun"), ("经典论述", "sec-quote")
+    ]
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                header
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    darkHeader(proxy: proxy)
 
-                // ① 基本信息
-                basicInfoCard
+                    // ① 基本信息
+                    basicInfoCard.id("sec-basic")
 
-                // ② 基本命盘（问真式行式大表）
-                mingPanCard
+                    // ② 基本命盘（问真式行式大表）
+                    mingPanCard.id("sec-mingpan")
 
-                // ③ 五行分布 + 旺衰三判
-                wangShuaiCard
+                    // ③ 五行分布 + 旺衰三判
+                    wangShuaiCard
 
-                // ④ 喜用 / 忌神 / 调候 / 格局
-                xiYongCard
+                    // ④ 喜用 / 忌神 / 调候 / 格局
+                    xiYongCard
 
-                // ⑤ 大运 + 流年
-                daYunCard
+                    // ⑤ 大运 + 流年
+                    daYunCard.id("sec-dayun")
 
-                // ⑥ 经典论述
-                quoteCard
+                    // ⑥ 经典论述
+                    quoteCard.id("sec-quote")
 
-                Spacer().frame(height: 12)
+                    Spacer().frame(height: 12)
+                }
             }
         }
         .background(BaziTheme.canvas)
     }
 
-    // MARK: - 头部
+    // MARK: - 头部（问真式：黑色通栏 + 金页签 + 金圈头像信息条 + 金 chips）
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("命盘")
-                .font(BaziTheme.largeTitle())
-                .foregroundStyle(BaziTheme.ink)
-            Text("\(chart.gender == "男" ? "乾造" : "坤造") · \(chart.name) · \(chart.pillars.map(\.ganzhi).joined(separator: " "))")
-                .font(BaziTheme.footnote(14))
-                .foregroundStyle(BaziTheme.secondary)
+    private var chips: [String] {
+        [
+            "\(chart.gender == "男" ? "乾造" : "坤造") · \(chart.dayMaster)日元",
+            "\(chart.pillars[0].ganzhi)年 · 属\(chart.shengxiao)",
+            "\(chart.pillars[1].zhi)月 · \(chart.renYuanSiLing)当令"
+        ]
+    }
+
+    private func darkHeader(proxy: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 四页签
+            HStack(spacing: 0) {
+                ForEach(tabs, id: \.0) { tab in
+                    let on = activeTab == tab.0
+                    Text(tab.0)
+                        .font(.system(size: 14, weight: on ? .semibold : .regular))
+                        .foregroundStyle(on ? BaziTheme.goldOnBlack : Color.white.opacity(0.55))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .overlay(alignment: .bottom) {
+                            if on {
+                                Rectangle().fill(BaziTheme.actionBlue)
+                                    .frame(width: 28, height: 2)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .onTapGesture {
+                            activeTab = tab.0
+                            withAnimation { proxy.scrollTo(tab.1, anchor: .top) }
+                        }
+                }
+            }
+            // who 信息条
+            HStack(spacing: 12) {
+                Text(String(chart.name.first ?? "灵"))
+                    .font(.system(size: 18, weight: .bold, design: .serif))
+                    .foregroundStyle(BaziTheme.goldOnBlack)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().stroke(BaziTheme.actionBlue, lineWidth: 1.5))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(chart.name)
+                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                    Text("农历：\(chart.lunarDate) \(chart.hour)")
+                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                    Text("阳历：\(chart.solarDate) \(chart.hour)")
+                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+
+            // 金色 chips
+            HStack(spacing: 6) {
+                ForEach(chips, id: \.self) { c in
+                    Text(c)
+                        .font(.system(size: 10))
+                        .foregroundStyle(BaziTheme.goldOnBlack)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(BaziTheme.goldOnBlack.opacity(0.10)))
+                        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(BaziTheme.goldOnBlack.opacity(0.35), lineWidth: 1))
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 14)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
+        .background(BaziTheme.blackPill)
     }
 
     // MARK: - ① 基本信息
@@ -125,42 +192,39 @@ struct ChartView: View {
             .padding(.bottom, 10)
 
             VStack(spacing: 0) {
-                // 1 宫位
+                // 1 宫位（日柱标签金字）
                 pzRow("宫位", isFirst: true) { i in
                     VStack(spacing: 2) {
-                        Text(pillarNames[i]).font(.system(size: 11, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                        Text(pillarNames[i]).font(.system(size: 11, weight: i == 2 ? .semibold : .regular))
+                            .foregroundStyle(i == 2 ? BaziTheme.goldDeep : BaziTheme.ink)
                         Text(gongWei[i]).font(.system(size: 9)).foregroundStyle(BaziTheme.tertiary)
                     }
                 }
-                // 2 主星（十神，点按查词）
+                // 2 主星（十神，点按查词；日柱显示「日元」金字）
                 pzRow("主星") { i in
-                    Text(chart.pillars[i].shiShen)
+                    Text(i == 2 ? "日元" : chart.pillars[i].shiShen)
                         .font(.system(size: 13, weight: i == 2 ? .semibold : .regular))
-                        .foregroundStyle(i == 2 ? BaziTheme.actionBlue : BaziTheme.secondary)
-                        .onTapGesture { term = Glossary.lookup(chart.pillars[i].shiShen) }
+                        .foregroundStyle(i == 2 ? BaziTheme.goldDeep : BaziTheme.secondary)
+                        .onTapGesture { term = Glossary.lookup(i == 2 ? "日主" : chart.pillars[i].shiShen) }
                 }
-                // 3 天干
+                // 3 天干（五行沉色 + 色点）
                 pzRow("天干") { i in
                     let p = chart.pillars[i]
-                    VStack(spacing: 1) {
+                    HStack(spacing: 3) {
                         Text(p.gan)
-                            .font(.system(size: 26, weight: .semibold))
-                            .foregroundStyle(i == 2 ? BaziTheme.actionBlue : BaziTheme.wuxingColor(ganWuxing(p.gan)))
-                        Text(ganWuxing(p.gan))
-                            .font(.system(size: 9))
-                            .foregroundStyle(BaziTheme.tertiary)
+                            .font(.system(size: 23, weight: .semibold))
+                            .foregroundStyle(BaziTheme.wuxingColor(ganWuxing(p.gan)))
+                        Circle().fill(BaziTheme.wuxingColor(ganWuxing(p.gan))).frame(width: 6, height: 6)
                     }
                 }
-                // 4 地支
+                // 4 地支（五行沉色 + 色点）
                 pzRow("地支") { i in
                     let p = chart.pillars[i]
-                    VStack(spacing: 1) {
+                    HStack(spacing: 3) {
                         Text(p.zhi)
-                            .font(.system(size: 26, weight: .semibold))
-                            .foregroundStyle(i == 2 ? BaziTheme.actionBlue : BaziTheme.wuxingColor(zhiWuxing(p.zhi)))
-                        Text(zhiWuxing(p.zhi))
-                            .font(.system(size: 9))
-                            .foregroundStyle(BaziTheme.tertiary)
+                            .font(.system(size: 23, weight: .semibold))
+                            .foregroundStyle(BaziTheme.wuxingColor(zhiWuxing(p.zhi)))
+                        Circle().fill(BaziTheme.wuxingColor(zhiWuxing(p.zhi))).frame(width: 6, height: 6)
                     }
                 }
                 // 5 藏干（含副星）
