@@ -4,6 +4,8 @@ import SwiftUI
 struct HePanView: View {
     let result: HePanResult
 
+    @State private var saved = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {

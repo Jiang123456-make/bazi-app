@@ -63,7 +63,7 @@ struct AboutSheet: View {
             VStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .stroke(BaziTheme.gold, lineWidth: 1.5)
+                        .stroke(BaziTheme.actionBlue, lineWidth: 1.5)
                         .frame(width: 56, height: 56)
                     Text("灵")
                         .font(.system(size: 26, weight: .semibold, design: .serif))
@@ -78,7 +78,7 @@ struct AboutSheet: View {
                 }
 
                 card {
-                    aboutRow("版本", valueText)
+                    aboutRow("版本", versionText)
                     Divider().overlay(BaziTheme.divider)
                     aboutRow("备案号", "待备案通过后展示")
                     Divider().overlay(BaziTheme.divider)

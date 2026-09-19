@@ -36,16 +36,16 @@ enum BaziSelfCheck {
 
     // MARK: - 执行
 
+    struct Item {
+        let name: String
+        let ok: Bool
+        let detail: String   // 通过时显示实际排盘；失败时显示期望 vs 实际
+    }
+
     struct Result {
         let passed: Int
         let total: Int
         let items: [Item]
-
-        struct Item {
-            let name: String
-            let ok: Bool
-            let detail: String   // 通过时显示实际排盘；失败时显示期望 vs 实际
-        }
 
         var summary: String { "\(passed)/\(total) 通过" }
     }

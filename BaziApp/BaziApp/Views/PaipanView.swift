@@ -590,7 +590,7 @@ private struct BirthWheelCard: View {
 
     private func wheelPicker(_ label: String, items: [String], selection: Binding<Int>,
                              width: CGFloat? = nil, fontSize: CGFloat = 15) -> some View {
-        Picker(label, selection: selection) {
+        let picker = Picker(label, selection: selection) {
             ForEach(items.indices, id: \.self) { i in
                 Text(items[i])
                     .font(.system(size: fontSize))
@@ -599,7 +599,13 @@ private struct BirthWheelCard: View {
         }
         .pickerStyle(.wheel)
         .font(.system(size: fontSize))
-        .frame(width: width, maxWidth: width == nil ? .infinity : nil)
+        return Group {
+            if let w = width {
+                picker.frame(width: w)
+            } else {
+                picker.frame(maxWidth: .infinity)
+            }
+        }
         .frame(height: 118)
         .clipped()
     }
