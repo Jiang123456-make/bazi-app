@@ -51,9 +51,10 @@ struct ReportView: View {
 
     private func loadAI(_ c: BaziChart) {
         aiLoading = true
+        let ask = "请为我的八字命盘做一份详细的综合命理解读，分五部分：一性格特质（结合日主与格局）；二事业方向（结合喜用神与行业五行）；三财运节奏（结合财星与身强弱）；四感情模式（结合夫妻宫与配偶星）；五健康与大运提醒（结合当前大运）。每个部分先给结论，再引用具体干支、十神作为依据，最后给一条可操作的建议。总长 500 字左右，纯文本输出（禁用 Markdown 符号）。"
         let messages: [AiService.ChatMessage] = [
-            AiService.ChatMessage(role: "system", content: AiService.buildSystemPrompt(chart: c)),
-            AiService.ChatMessage(role: "user", content: "请为我的八字命盘做一段综合命理解读（性格、事业、财运、感情、健康），200 字以内，分点清晰，纯文本输出（禁用 Markdown 符号）。")
+            AiService.ChatMessage(role: "system", content: AiService.buildSystemPrompt(chart: c, query: ask)),
+            AiService.ChatMessage(role: "user", content: ask)
         ]
         AiService.chat(messages: messages) { result in
             aiLoading = false

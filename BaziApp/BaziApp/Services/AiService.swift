@@ -17,14 +17,14 @@ struct AiService {
 
     // MARK: - 系统提示词
 
-    /// 组装命理顾问系统提示词
-    static func buildSystemPrompt(chart: BaziChart?) -> String {
+    /// 组装命理顾问系统提示词（query 用于按话题检索知识库条目）
+    static func buildSystemPrompt(chart: BaziChart?, query: String = "") -> String {
         var lines: [String] = [
             "你是「灵犀」，是「灵犀命理」App 内置的 AI 命理顾问，一位深谙八字命理、语气温和有洞察力的传统文化顾问。",
             "回答要求：",
             "1. 结合用户的八字命盘进行解读，专业、有依据，不编造命盘信息；",
-            "2. 语气温和、有共情，像一位值得信赖的长辈或朋友；",
-            "3. 回答控制在 200 字以内，分点清晰、口语化；",
+            "2. 每条结论都必须给出命盘依据（引用具体干支、十神、生克关系），先给结论再给依据，有理有据；",
+            "3. 语气温和、有共情，像一位值得信赖的长辈或朋友；回答详实，默认 400 字左右，用户追问细节时可更长；",
             "4. 命理分析仅供文化参考，不构成决策依据，不承诺吉凶祸福的确定性；",
             "5. 涉及婚姻、投资、健康、法律等重大决策时，提醒用户理性决策、勿迷信；",
             "6. 全程纯文本输出：不要使用任何 Markdown 符号（**、##、- 列表符、反引号），直接输出汉字内容。"
@@ -32,6 +32,10 @@ struct AiService {
         if let c = chart {
             lines.append("用户当前命盘信息（据此解读）：")
             lines.append(chartSummary(c))
+        }
+        let knowledge = KnowledgeStore.promptBlock(for: chart, query: query)
+        if !knowledge.isEmpty {
+            lines.append(knowledge)
         }
         lines.append("现在请回答用户的提问。")
         return lines.joined(separator: "\n")

@@ -481,13 +481,13 @@ struct AdvisorView: View {
         全程纯文本：禁止使用任何 Markdown 符号（不要 **、##、- 列表符、反引号），直接输出汉字内容
         【话题】从「事业/财运/感情/健康/学业/合盘/综合」中选一个词
         【结论】一句话直接回应问题，25字内
-        【分析】2-3点，每点独占一行、以数字开头（如 1. ），每点30字内，可引用干支与十神
-        【建议】一句可执行的行动建议，30字内
+        【分析】2-4点，每点独占一行、以数字开头（如 1. ），每点60字内，必须引用具体干支或十神作为依据
+        【建议】一句可执行的行动建议，40字内
         【追问】3个用户最可能接着问的问题，用「|」分隔
         """
 
         let memKey = AdvisorMemory.chartKey(chart)
-        var systemContent = AiService.buildSystemPrompt(chart: chart)
+        var systemContent = AiService.buildSystemPrompt(chart: chart, query: last.text)
         let mem = AdvisorMemory.memorySummary(forKey: memKey)
         if !mem.isEmpty { systemContent += "\n" + mem }
         systemContent += "\n" + AdvisorMemory.stylePrompt

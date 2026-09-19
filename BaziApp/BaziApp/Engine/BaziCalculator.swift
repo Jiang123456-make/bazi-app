@@ -209,9 +209,11 @@ enum BaziCalculator {
 
     // MARK: - 大运
 
-    /// 大运（顺逆 + 起运 + 列表）
-    static func daYun(year: Int, month: Int, day: Int, hour: Int, gender: String, monthPillar: String) -> (direction: String, start: String, list: [DaYun]) {
-        let yearPillarStr = yearPillar(year: year, month: month, day: day)
+    /// 大运（顺逆 + 精确起运 + 列表）—— 对齐 lunar-python 口径
+    /// 起运规则：出生 ↔ 相邻「节」的距离，3 日 = 1 年，1 日 = 4 个月，1 时辰 = 10 日（时辰差法 sect 1）
+    /// 岁数口径：虚岁（起运年 − 出生年 + 1）；序列：月柱 ± n（n = 1…9）
+    static func daYun(year: Int, month: Int, day: Int, hour: Int, minute: Int, gender: String, monthPillar: String) -> (direction: String, start: String, list: [DaYun]) {
+        let yearPillarStr = yearPillar(year: year, month: month, day: day, hour: hour, minute: minute)
         let yearGan = String(yearPillarStr.first!)
         let isYangYear = Gan.isYang[Gan.all.firstIndex(of: yearGan)!]
         // 阳年男/阴年女 顺排，否则逆排
@@ -221,17 +223,49 @@ enum BaziCalculator {
         let mpIndex = liushiJiazi.firstIndex(of: monthPillar)!
         let dayGan = dayMasterGan(year: year, month: month, day: day)
 
-        // 起运年龄 = 出生到最近节的天数 ÷ 3（简化：按日估算）
-        let startAge = estimateStartAge(year: year, month: month, day: day, shun: shun)
+        // —— 精确起运（lunar-python 时辰差法）——
+        var startYears = 0, startMonths = 0, startDays = 0
+        var qiyunYear = year
+        var qiyunDate = ""
+        if let bd = yunBoundary(year: year, month: month, day: day, hour: hour, minute: minute, forward: shun) {
+            var hourDiff = bd.endZhi - bd.startZhi
+            var dayDiff = bd.endJDN - bd.startJDN
+            if hourDiff < 0 { hourDiff += 12; dayDiff -= 1 }
+            let monthDiff = hourDiff * 10 / 30
+            let monthTotal = dayDiff * 4 + monthDiff
+            startYears = monthTotal / 12
+            startMonths = monthTotal % 12
+            startDays = hourDiff * 10 - monthDiff * 30
+            // 起运阳历日期 = 出生日期 + 起运年 + 起运月 + 起运天（日历加法）
+            var qy = year + startYears
+            var mIdx = (month - 1) + startMonths
+            qy += mIdx / 12
+            mIdx %= 12
+            let qd = dateFromJDN(julianDay(year: qy, month: mIdx + 1, day: day) + startDays)
+            qiyunYear = qd.year
+            qiyunDate = String(format: "%04d-%02d-%02d", qd.year, qd.month, qd.day)
+        } else {
+            // 兜底：节气表缺失时退回粗略估算
+            startYears = estimateStartAge(year: year, month: month, day: day, shun: shun)
+            qiyunYear = year + startYears
+        }
+        let startStr: String
+        if qiyunDate.isEmpty {
+            startStr = "起运 \(startYears) 岁"
+        } else {
+            let yPart = startYears > 0 ? "\(startYears)年" : ""
+            startStr = "起运 \(yPart)\(startMonths)个月\(startDays)天 · \(qiyunDate) 交运"
+        }
 
         var list: [DaYun] = []
-        for step in 0..<8 {
+        for step in 0..<9 {
             let offset = shun ? (step + 1) : -(step + 1)
             let gz = liushiJiazi[(mpIndex + offset + 60) % 60]
             let ss = ShiShen.of(dayGan: dayGan, targetGan: String(gz.first!))
-            let age = startAge + step * 10
-            let startYear = year + age
+            let startYear = qiyunYear + step * 10
+            let startAge = startYear - year + 1   // 虚岁
             let endYear = startYear + 9
+            let endAge = startAge + 9
             let ny = NaYin.map[gz] ?? ""
             let xy = XingYun.state(gan: dayGan, zhi: String(gz.last!)) // 日主对大运地支的十二长生
             // 该大运对应的 10 年流年（问真式专业细盘）
@@ -243,12 +277,44 @@ enum BaziCalculator {
                 let lss = ShiShen.of(dayGan: dayGan, targetGan: String(lgz.first!))
                 lns.append(LiuNian(year: ly, ganzhi: lgz, shiShen: lss))
             }
-            list.append(DaYun(ganzhi: gz, shiShen: ss, startAge: age, endAge: age + 9,
+            list.append(DaYun(ganzhi: gz, shiShen: ss, startAge: startAge, endAge: endAge,
                               startYear: startYear, endYear: endYear, naYin: ny,
                               xingYun: xy, liunian: lns))
         }
 
-        return (direction, "起运 \(startAge) 岁", list)
+        return (direction, startStr, list)
+    }
+
+    /// 起运边界：顺排 = 出生→下一个节；逆排 = 上一个节→出生
+    /// 返回两端各自的日序数（date-only JDN）与时辰下标（23 点按 11 计，对齐 lunar-python）
+    private static func yunBoundary(year: Int, month: Int, day: Int, hour: Int, minute: Int, forward: Bool)
+        -> (startJDN: Int, startZhi: Int, endJDN: Int, endZhi: Int)? {
+        guard JieQiTable.isLoaded else { return nil }
+        let birthJDN = julianDay(year: year, month: month, day: day)
+        let birthAbs = Double(birthJDN) * 1440.0 + Double(hour) * 60.0 + Double(minute)
+        var moments: [(abs: Double, jdn: Int, hour: Int)] = []
+        for yr in (year - 1)...(year + 1) {
+            for idx in 0...11 {
+                guard let m = JieQiTable.moment(year: yr, index: idx) else { continue }
+                let jdn = julianDay(year: yr, month: m.month, day: m.day)
+                let absMin = Double(jdn) * 1440.0 + Double(m.hour) * 60.0 + Double(m.minute)
+                moments.append((absMin, jdn, m.hour))
+            }
+        }
+        moments.sort { $0.abs < $1.abs }
+        guard let prev = moments.last(where: { $0.abs <= birthAbs }),
+              let next = moments.first(where: { $0.abs > birthAbs }) else { return nil }
+        let birthZhi = timeZhiIndexYun(hour)
+        if forward {
+            return (birthJDN, birthZhi, next.jdn, timeZhiIndexYun(next.hour))
+        } else {
+            return (prev.jdn, timeZhiIndexYun(prev.hour), birthJDN, birthZhi)
+        }
+    }
+
+    /// 时辰下标（lunar-python Yun 口径：23 点按 11 计）
+    private static func timeZhiIndexYun(_ hour: Int) -> Int {
+        hour == 23 ? 11 : ((hour + 1) / 2) % 12
     }
 
     /// 估算起运年龄（简化：出生月到最近节的日差 ÷ 3）
@@ -790,19 +856,19 @@ enum BaziCalculator {
             ? "\(ws.topTwo)偏旺，宜\(xiyong.joined(separator: "、"))泄秀调候"
             : "日主偏弱，宜\(xiyong.joined(separator: "、"))生扶为要"
 
-        // 大运
-        let dy = daYun(year: year, month: month, day: day, hour: hh, gender: gender, monthPillar: mp)
+        // 大运（用真太阳时平移后的出生时刻，与四柱口径一致）
+        let dy = daYun(year: pyY, month: pyM, day: pyD, hour: trueHour, minute: trueMinute,
+                       gender: gender, monthPillar: mp)
 
         // 流年（当前年 + 9 年）
         let calendar = Calendar.current
         let currentYear = calendar.component(.year, from: Date())
         let ln = liuNian(dayGan: dayGan, fromYear: currentYear, count: 10)
 
-        // 当前大运下标
-        let age = currentYear - year
+        // 当前大运下标（按交运年份区间判定）
         var curDyIndex = 0
-        for (i, d) in dy.list.enumerated() {
-            if age >= d.startAge && age <= d.endAge { curDyIndex = i }
+        for (i, d) in dy.list.enumerated() where currentYear >= d.startYear && currentYear <= d.endYear {
+            curDyIndex = i
         }
 
         // MARK: 问真式基本信息（生肖/星座/农历/节气/胎元/命宫/身宫/命卦/星宿）

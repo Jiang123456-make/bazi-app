@@ -60,6 +60,30 @@ enum BaziSelfCheck {
         }
     }()
 
+    /// 大运对拍锚点（lunar-python 权威导出：起运年月天 / 交运日 / 前 4 步大运）
+    private struct DayunCase {
+        let dt: String
+        let gender: String
+        let start: [Int]
+        let qiyun: String
+        let dayun: [[String: Any]]
+    }
+
+    private static let dayunCases: [DayunCase] = {
+        guard let url = Bundle.main.url(forResource: "dayun-parity", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let cases = obj["cases"] as? [[String: Any]] else { return [] }
+        return cases.compactMap { c in
+            guard let dt = c["dt"] as? String,
+                  let gender = c["gender"] as? String,
+                  let start = c["start"] as? [Int],
+                  let qiyun = c["qiyun"] as? String,
+                  let dayun = c["dayun"] as? [[String: Any]] else { return nil }
+            return DayunCase(dt: dt, gender: gender, start: start, qiyun: qiyun, dayun: dayun)
+        }
+    }()
+
     // MARK: - 执行
 
     struct Item {
@@ -118,6 +142,41 @@ enum BaziSelfCheck {
                 ? "\(pc.dt) \(pc.city)\(pc.tst ? " 真太阳时" : "") ✓"
                 : "\(pc.dt) \(pc.city)：期望 \(pc.pillars.joined(separator: " "))，实际 \(actual.joined(separator: " "))"
             items.append(Item(name: "对拍 \(i + 1)", ok: ok, detail: detail))
+        }
+
+        // 大运对拍（dayun-parity.json：起运 + 前 4 步大运，lunar-python 权威口径）
+        for (i, dc) in Self.dayunCases.enumerated() {
+            let chart = BaziCalculator.calculate(name: "对拍", gender: dc.gender,
+                                                 solarDate: String(dc.dt.prefix(10)),
+                                                 hour: String(dc.dt.suffix(5)),
+                                                 place: "北京", useTrueSolar: false)
+            var fails: [String] = []
+            if dc.start[0] > 0, !chart.qiYunDetail.contains("起运 \(dc.start[0])年") { fails.append("起运年") }
+            if !chart.qiYunDetail.contains("\(dc.start[1])个月") { fails.append("起运月") }
+            if !chart.qiYunDetail.contains("个月\(dc.start[2])天") { fails.append("起运天") }
+            if !chart.qiYunDetail.contains(dc.qiyun) { fails.append("交运日") }
+            for (k, exp) in dc.dayun.enumerated() {
+                guard chart.dayun.indices.contains(k) else {
+                    fails.append("第\(k + 1)步缺失")
+                    break
+                }
+                let act = chart.dayun[k]
+                let egz = exp["gz"] as? String ?? ""
+                let esy = exp["sy"] as? Int ?? 0
+                let eey = exp["ey"] as? Int ?? 0
+                let esa = exp["sa"] as? Int ?? 0
+                let eea = exp["ea"] as? Int ?? 0
+                if act.ganzhi != egz || act.startYear != esy || act.endYear != eey
+                    || act.startAge != esa || act.endAge != eea {
+                    fails.append("第\(k + 1)步 期望\(egz)/\(esy)/\(esa)岁 实际\(act.ganzhi)/\(act.startYear)/\(act.startAge)岁")
+                    break
+                }
+            }
+            let ok = fails.isEmpty
+            let detail = ok
+                ? "\(dc.dt) \(dc.gender) \(chart.qiYunDetail) ✓"
+                : "\(dc.dt) \(dc.gender)：\(fails.joined(separator: "；"))"
+            items.append(Item(name: "大运对拍 \(i + 1)", ok: ok, detail: detail))
         }
 
         let result = Result(passed: items.filter { $0.ok }.count,
