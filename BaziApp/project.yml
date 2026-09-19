@@ -33,3 +33,27 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 无需访问相册
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UIRequiresFullScreen: YES
+  BaziAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: BaziAppUITests
+    dependencies:
+      - target: BaziApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lingxi.bazi.uitests
+        TEST_TARGET_NAME: BaziApp
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  BaziApp:
+    build:
+      targets:
+        BaziApp: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - BaziAppUITests

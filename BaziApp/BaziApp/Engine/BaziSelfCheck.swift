@@ -179,6 +179,24 @@ enum BaziSelfCheck {
             items.append(Item(name: "大运对拍 \(i + 1)", ok: ok, detail: detail))
         }
 
+        // 命宫/身宫对拍（lunar-python 权威，节气月口径——含农历月/节气月错位用例）
+        let gongCases: [(String, String, String, String, String)] = [
+            ("1990-05-15", "08:30", "男", "甲申", "丙戌"),
+            ("1996-11-06", "00:30", "女", "乙未", "己亥"),
+            ("1984-02-02", "12:00", "男", "壬戌", "庚申"),
+            ("1975-08-23", "15:40", "男", "己丑", "辛巳"),
+        ]
+        for (i, gc) in gongCases.enumerated() {
+            let chart = BaziCalculator.calculate(name: "对拍", gender: gc.2,
+                                                 solarDate: gc.0, hour: gc.1,
+                                                 place: "北京", useTrueSolar: false)
+            let ok = chart.mingGong == gc.3 && chart.shenGong == gc.4
+            let detail = ok
+                ? "\(gc.0) 命宫\(chart.mingGong) 身宫\(chart.shenGong) ✓"
+                : "\(gc.0)：期望 命宫\(gc.3)/身宫\(gc.4)，实际 命宫\(chart.mingGong)/身宫\(chart.shenGong)"
+            items.append(Item(name: "命宫对拍 \(i + 1)", ok: ok, detail: detail))
+        }
+
         let result = Result(passed: items.filter { $0.ok }.count,
                             total: items.count,
                             items: items)

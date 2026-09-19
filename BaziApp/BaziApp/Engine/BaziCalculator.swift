@@ -545,33 +545,33 @@ enum BaziCalculator {
         return tGan + tZhi
     }
 
-    /// 命宫：正月=子逆数至生月，再从生时顺数至卯（已验证：1998 五月初... 命宫酉；2026-08-15 命宫亥）
-    static func mingGong(lunarMonth: Int, shichenIndex: Int, yearGan: String) -> String {
-        // 逆数生月：正月子 → Zhi[(13 - n) % 12]
-        let monthZhiIdx = (13 - lunarMonth) % 12
-        // 顺数生时至卯（卯下标 3）
-        let offset = (3 - shichenIndex + 12) % 12
-        let gongZhiIdx = (monthZhiIdx + offset) % 12
-        let gongZhi = Zhi.all[gongZhiIdx]
-        // 命宫天干：年上起月（五虎遁）顺数到命宫地支
-        let yinGan = wuhudun(yearGan: yearGan)
-        let ganOffset = (gongZhiIdx - 2 + 12) % 12
-        let ganIdx = (Gan.all.firstIndex(of: yinGan)! + ganOffset) % 10
-        return Gan.all[ganIdx] + gongZhi
+    /// 命宫/身宫用的月支序表（lunar-python 口径：下标 1-12，寅=1 … 丑=12；下标 0 不用）
+    private static let gongMonthZhi = ["", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥", "子", "丑"]
+
+    /// 命宫天干：(年干序+1)×2 + offset，循环减 10（对齐 lunar-python，GAN 1-based）
+    private static func gongGan(yearGan: String, offset: Int) -> String {
+        var gi = (Gan.all.firstIndex(of: yearGan)! + 1) * 2 + offset
+        while gi > 10 { gi -= 10 }
+        return Gan.all[gi - 1]
     }
 
-    /// 身宫：正月=子顺数至生月，再从生时顺数至酉（简化参考实现，流派差异较大）
-    static func shenGong(lunarMonth: Int, shichenIndex: Int, yearGan: String) -> String {
-        // 顺数生月：正月子 → Zhi[(n - 1) % 12]
-        let monthZhiIdx = (lunarMonth - 1) % 12
-        // 顺数生时至酉（酉下标 9）
-        let offset = (9 - shichenIndex + 12) % 12
-        let gongZhiIdx = (monthZhiIdx + offset) % 12
-        let gongZhi = Zhi.all[gongZhiIdx]
-        let yinGan = wuhudun(yearGan: yearGan)
-        let ganOffset = (gongZhiIdx - 2 + 12) % 12
-        let ganIdx = (Gan.all.firstIndex(of: yinGan)! + ganOffset) % 10
-        return Gan.all[ganIdx] + gongZhi
+    /// 命宫：月支序 + 时支序（均在 gongMonthZhi 表内，时支子=11），和 ≥14 取 26-和，否则取 14-和
+    /// 对拍 lunar-python 5/5（含农历/节气月错位的 1984-02-02）
+    static func mingGong(monthZhi: String, hourZhi: String, yearGan: String) -> String {
+        let mi = gongMonthZhi.firstIndex(of: monthZhi) ?? 1
+        let ti = gongMonthZhi.firstIndex(of: hourZhi) ?? 1
+        let offset = (mi + ti) >= 14 ? 26 - (mi + ti) : 14 - (mi + ti)
+        return gongGan(yearGan: yearGan, offset: offset) + gongMonthZhi[offset]
+    }
+
+    /// 身宫：月支序（gongMonthZhi 表）+ 时支序（标准 ZHI 下标，子=0），和 >12 减 12
+    /// 对拍 lunar-python 5/5
+    static func shenGong(monthZhi: String, hourZhi: String, yearGan: String) -> String {
+        let mi = gongMonthZhi.firstIndex(of: monthZhi) ?? 1
+        let ti = Zhi.all.firstIndex(of: hourZhi) ?? 0
+        var offset = mi + ti
+        if offset > 12 { offset -= 12 }
+        return gongGan(yearGan: yearGan, offset: offset) + gongMonthZhi[offset]
     }
 
     /// 命卦（东四命/西四命）：以立春为界的年命推算
@@ -881,8 +881,8 @@ enum BaziCalculator {
         let taiYuanFull = "\(taiYuanStr)·\(NaYin.map[taiYuanStr] ?? "")"
         let yearGan = String(yp.first!)
         let shichenIdx = hourZhiIndex(hour: trueHour, minute: trueMinute)
-        let mingGongStr = mingGong(lunarMonth: lunar.month, shichenIndex: shichenIdx, yearGan: yearGan)
-        let shenGongStr = shenGong(lunarMonth: lunar.month, shichenIndex: shichenIdx, yearGan: yearGan)
+        let mingGongStr = mingGong(monthZhi: String(mp.last!), hourZhi: Zhi.all[shichenIdx], yearGan: yearGan)
+        let shenGongStr = shenGong(monthZhi: String(mp.last!), hourZhi: Zhi.all[shichenIdx], yearGan: yearGan)
         let mingGuaStr = mingGua(year: year, month: month, day: day, gender: gender)
         let xingXiuStr = xingXiu(mingGongZhi: String(mingGongStr.last!))
         // 胎息 / 人元司令 / 称骨 / 调候

@@ -1,0 +1,59 @@
+# 灵犀真机（模拟器）UI 测试 —— GitHub macOS 云端实际操作 App + 逐屏截图
+# 触发：GitHub Actions 手动运行，或 scripts/gh-trigger-uitest.js
+
+name: UI Test (Simulator)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  uitest:
+    name: iOS Simulator UI Test
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        working-directory: BaziApp
+        run: xcodegen generate
+
+      - name: 选择可用模拟器
+        id: sim
+        run: |
+          xcrun simctl list devices available
+          DEVICE=$(xcrun simctl list devices available | grep -o 'iPhone [0-9]* ' | sort -u | tail -1 | xargs)
+          echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
+          echo "选用模拟器: $DEVICE"
+
+      - name: 运行 UI 测试
+        working-directory: BaziApp
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project BaziApp.xcodeproj \
+            -scheme BaziApp \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
+            -resultBundlePath "${{ github.workspace }}/result.xcresult" \
+            2>&1 | tail -80
+
+      - name: 上传截图
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lingxi-screenshots
+          path: /tmp/lingxi-shots
+          if-no-files-found: warn
+
+      - name: 上传测试结果
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xcresult
+          path: result.xcresult
+          if-no-files-found: warn

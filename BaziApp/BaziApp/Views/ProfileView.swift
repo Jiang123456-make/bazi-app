@@ -9,6 +9,8 @@ struct ProfileView: View {
     @State private var ppList: [PaipanEntry] = []
     @State private var hpList: [HePanEntry] = []
     @State private var showClearDialog = false
+    /// 自检结果异步加载（486 例全量排盘较重，严禁在 body 内同步执行——会卡死主线程）
+    @State private var check: BaziSelfCheck.Result?
 
     // 功能入口 / 设置 Sheet
     @State private var showGlossary = false
@@ -24,8 +26,6 @@ struct ProfileView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 20) {
-                        let check = BaziSelfCheck.run()
-
                         // 标题
                         Text("我的")
                             .font(BaziTheme.largeTitle())
@@ -86,8 +86,8 @@ struct ProfileView: View {
                             groupDivider()
                             funcEntry(icon: "checkmark.seal", title: "引擎自检",
                                       sub: "排盘引擎正确性锚点校验",
-                                      badge: "\(check.passed)/\(check.total)",
-                                      badgeGood: check.passed == check.total) { scrollTo(proxy, "selfcheck") }
+                                      badge: check.map { "\($0.passed)/\($0.total)" } ?? "校验中",
+                                      badgeGood: check.map { $0.passed == $0.total } ?? true) { scrollTo(proxy, "selfcheck") }
                         }
                         .padding(16)
                         .baziCard()
@@ -112,28 +112,34 @@ struct ProfileView: View {
                             .padding(.horizontal, 20)
                         }
 
-                        // 排盘引擎自检
+                        // 排盘引擎自检（异步结果，未就绪时显示占位）
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Text("引擎自检").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                                 Spacer()
-                                Text(check.summary)
+                                Text(check.map { $0.summary } ?? "校验中…")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(check.passed == check.total ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                                    .foregroundStyle(check.map { $0.passed == $0.total } ?? true ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
                             }
-                            let rows = Self.selfCheckRows(check)
-                            ForEach(rows.indices, id: \.self) { i in
-                                let item = rows[i]
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(item.ok ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
-                                        .padding(.top, 1)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(item.name).font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
-                                        Text(item.detail).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                            if let check {
+                                let rows = Self.selfCheckRows(check)
+                                ForEach(rows.indices, id: \.self) { i in
+                                    let item = rows[i]
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(item.ok ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                                            .padding(.top, 1)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(item.name).font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
+                                            Text(item.detail).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                                        }
                                     }
                                 }
+                            } else {
+                                Text("正在后台逐例校验 490 例锚点，完成后自动刷新…")
+                                    .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                                    .padding(.vertical, 10)
                             }
                             Text("锚点+对拍基线（lunar-python 权威口径 \(check.total) 例：历法事实锚点 / 立春节气交界 / 晚子时 / 极端经度），全部通过即与权威引擎四柱一致。")
                                 .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
@@ -230,6 +236,13 @@ struct ProfileView: View {
             .onAppear {
                 ppList = PaipanHistory.load()
                 hpList = HePanHistory.load()
+                // 自检后台执行，完成后回主线程刷新（避免 body 内同步跑 486 例排盘卡死）
+                if check == nil {
+                    Task.detached(priority: .userInitiated) {
+                        let result = BaziSelfCheck.run()
+                        await MainActor.run { self.check = result }
+                    }
+                }
             }
             .sheet(isPresented: $showGlossary) { GlossaryBrowser() }
             .sheet(isPresented: $showDisclaimer) { DisclaimerSheet() }

@@ -100,8 +100,8 @@ enum Glossary {
         "元辰": ("暗耗不顺之神", "旧称毛头星，主暗中的耗损与小人口舌，行事低调可避。")
     ]
 
-    /// 全部词条（词典浏览页用）：四个字典按名称稳定排序拼装
-    static var allTerms: [GlossaryTerm] {
+    /// 全部词条（词典浏览页用）：四个字典按名称稳定排序拼装（缓存：body 每次渲染都会取）
+    static let allTerms: [GlossaryTerm] = {
         var terms: [GlossaryTerm] = []
         terms += shiShen.keys.sorted().map {
             GlossaryTerm(name: $0, category: "十神", brief: shiShen[$0]!.brief, detail: shiShen[$0]!.detail)
@@ -116,7 +116,7 @@ enum Glossary {
             GlossaryTerm(name: $0, category: "概念", brief: concepts[$0]!.brief, detail: concepts[$0]!.detail)
         }
         return terms
-    }
+    }()
 
     /// 查词：十神 → 星运 → 神煞 → 概念 → 纳音兜底
     static func lookup(_ name: String) -> GlossaryTerm? {
