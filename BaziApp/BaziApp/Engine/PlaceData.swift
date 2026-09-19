@@ -233,7 +233,9 @@ enum PlaceData {
         Place(name: "澳门", province: "澳门", longitude: 113.55),
         Place(name: "台北", province: "台湾", longitude: 121.52),
         Place(name: "高雄", province: "台湾", longitude: 120.3),
-        Place(name: "台中", province: "台湾", longitude: 120.7)
+        Place(name: "台中", province: "台湾", longitude: 120.7),
+
+        // 补充城市（2026-09-19）
         Place(name: "全州", province: "广西", longitude: 111.07),
         Place(name: "全州县", province: "广西", longitude: 111.07),
         Place(name: "兴安", province: "广西", longitude: 110.67),
