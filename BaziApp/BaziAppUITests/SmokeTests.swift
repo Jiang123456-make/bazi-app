@@ -1,8 +1,8 @@
 import XCTest
 
 /// 灵犀真机（模拟器）冒烟测试：
-/// 实际启动 App → 排盘（demo 数据）→ 报告 → 顾问（键盘陷阱验证）→ 我的（自检 490/490）
-/// 逐屏截图存 /tmp/lingxi-shots，CI 上传为 artifacts。
+/// 实际启动 App → 试排示例（自动排盘并跳转命盘页）→ 返回 → 报告 → 顾问（键盘陷阱验证）
+/// → 我的（自检 490/490）→ 词典。逐屏截图存 /tmp/lingxi-shots，CI 上传为 artifacts。
 final class SmokeTests: XCTestCase {
 
     private func shot(_ app: XCUIApplication, _ name: String) {
@@ -21,20 +21,21 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10), "App 应启动并显示 TabBar")
         shot(app, "01-排盘页")
 
-        // ② 一键填入 demo 数据
+        // ② 一键试排示例（loadDemo 会自动生成并跳转命盘页）
         let demo = app.buttons.matching(NSPredicate(format: "label CONTAINS '试排示例'")).firstMatch
-        if demo.waitForExistence(timeout: 5) {
-            demo.tap()
+        XCTAssertTrue(demo.waitForExistence(timeout: 5), "应有「试排示例」按钮")
+        demo.tap()
+        sleep(3)
+        shot(app, "02-命盘页")
+
+        // ③ 从命盘页返回排盘输入页
+        let back = app.navigationBars.buttons.firstMatch
+        if back.waitForExistence(timeout: 5) {
+            back.tap()
             sleep(1)
         }
-        shot(app, "02-示例已填入")
-
-        // ③ 开始排盘
-        let cta = app.buttons["开始排盘"]
-        XCTAssertTrue(cta.waitForExistence(timeout: 5), "应有「开始排盘」按钮")
-        cta.tap()
-        sleep(2)
-        shot(app, "03-排盘完成")
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5), "返回后 TabBar 应可见")
+        shot(app, "03-返回排盘页")
 
         // ④ 报告页
         let reportTab = app.tabBars.buttons["报告"]
