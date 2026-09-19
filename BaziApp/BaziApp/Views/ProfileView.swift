@@ -141,8 +141,10 @@ struct ProfileView: View {
                                     .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
                                     .padding(.vertical, 10)
                             }
-                            Text("锚点+对拍基线（lunar-python 权威口径 \(check.total) 例：历法事实锚点 / 立春节气交界 / 晚子时 / 极端经度），全部通过即与权威引擎四柱一致。")
-                                .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+                            if let check {
+                                Text("锚点+对拍基线（lunar-python 权威口径 \(check.total) 例：历法事实锚点 / 立春节气交界 / 晚子时 / 极端经度），全部通过即与权威引擎四柱一致。")
+                                    .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+                            }
                         }
                         .padding(16)
                         .baziCard()
