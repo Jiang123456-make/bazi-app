@@ -121,8 +121,9 @@ struct ProfileView: View {
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(check.passed == check.total ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
                             }
-                            ForEach(check.items.indices, id: \.self) { i in
-                                let item = check.items[i]
+                            let rows = Self.selfCheckRows(check)
+                            ForEach(rows.indices, id: \.self) { i in
+                                let item = rows[i]
                                 HStack(alignment: .top, spacing: 8) {
                                     Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                                         .font(.system(size: 13))
@@ -134,7 +135,7 @@ struct ProfileView: View {
                                     }
                                 }
                             }
-                            Text("锚点均为公开可查的历法事实（如开国大典甲子日），通过即证明四柱与农历算法与公认历法一致。")
+                            Text("锚点+对拍基线（lunar-python 权威口径 \(check.total) 例：历法事实锚点 / 立春节气交界 / 晚子时 / 极端经度），全部通过即与权威引擎四柱一致。")
                                 .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
                         }
                         .padding(16)
@@ -346,6 +347,12 @@ struct ProfileView: View {
     private var level: String {
         guard let c = chart else { return "—" }
         return ChartScore.evaluate(c).level
+    }
+
+    /// 自检卡展示策略：有失败只列失败；全过则展示 9 条锚点样例（447 条对拍不全列）
+    static func selfCheckRows(_ check: BaziSelfCheck.Result) -> [BaziSelfCheck.Item] {
+        let failures = check.items.filter { !$0.ok }
+        return failures.isEmpty ? Array(check.items.prefix(9)) : failures
     }
 
     private func currentDayun(_ c: BaziChart) -> String {

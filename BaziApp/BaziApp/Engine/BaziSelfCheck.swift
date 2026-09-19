@@ -34,6 +34,32 @@ enum BaziSelfCheck {
         ("1984-02-02", 1984, 2, 2),
     ]
 
+    // MARK: - 对拍基线（parity.json）
+
+    struct ParityCase {
+        let dt: String
+        let city: String
+        let gender: String
+        let tst: Bool
+        let pillars: [String]
+    }
+
+    /// lunar-python 权威引擎导出的对拍锚点盘（立春/节气交界、晚子时、极端经度、闰月等）
+    private static let parityCases: [ParityCase] = {
+        guard let url = Bundle.main.url(forResource: "parity", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let cases = obj["cases"] as? [[String: Any]] else { return [] }
+        return cases.compactMap { c in
+            guard let dt = c["dt"] as? String,
+                  let city = c["city"] as? String,
+                  let gender = c["gender"] as? String,
+                  let tst = c["tst"] as? Bool,
+                  let pillars = c["pillars"] as? [String] else { return nil }
+            return ParityCase(dt: dt, city: city, gender: gender, tst: tst, pillars: pillars)
+        }
+    }()
+
     // MARK: - 执行
 
     struct Item {
@@ -78,6 +104,20 @@ enum BaziSelfCheck {
                 ? "农历 \(lunar.year)年\(lunar.isLeap ? "闰" : "")\(lunar.month)月\(lunar.day)日 ⇄ 还原一致"
                 : "往返失败：\(lunar.year)年\(lunar.isLeap ? "闰" : "")\(lunar.month)月\(lunar.day)日 → \(back.map { "\($0.year)-\($0.month)-\($0.day)" } ?? "nil")"
             items.append(Item(name: "农历往返 \(name)", ok: ok, detail: detail))
+        }
+
+        // 引擎对拍（parity.json：lunar-python 6tail 权威基线，447 例含边界）
+        for (i, pc) in Self.parityCases.enumerated() {
+            let chart = BaziCalculator.calculate(name: "对拍", gender: pc.gender,
+                                                 solarDate: String(pc.dt.prefix(10)),
+                                                 hour: String(pc.dt.suffix(5)),
+                                                 place: pc.city, useTrueSolar: pc.tst)
+            let actual = chart.pillars.map { $0.ganzhi }
+            let ok = actual == pc.pillars
+            let detail = ok
+                ? "\(pc.dt) \(pc.city)\(pc.tst ? " 真太阳时" : "") ✓"
+                : "\(pc.dt) \(pc.city)：期望 \(pc.pillars.joined(separator: " "))，实际 \(actual.joined(separator: " "))"
+            items.append(Item(name: "对拍 \(i + 1)", ok: ok, detail: detail))
         }
 
         let result = Result(passed: items.filter { $0.ok }.count,

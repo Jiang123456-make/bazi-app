@@ -45,23 +45,25 @@ enum BaziCalculator {
         return (year, month, day)
     }
 
-    // MARK: - 年柱（立春分界）
+    // MARK: - 年柱（立春分界，分钟级）
 
-    /// 立春的近似日期（返回该年立春的月/日，日级精度）
-    /// 立春通常在 2 月 3-5 日，简化为 2 月 4 日；精确到分钟需 VSOP87（MVP 用日级）
+    /// 立春的近似日期（返回该年立春的月/日，日级精度）—— 仅作 JieQiTable 缺失时的兜底
     static func lichunDate(year: Int) -> (month: Int, day: Int) {
-        // 简化：立春约在 2 月 4 日（1900-2100 误差 ±1 天）
-        // 更精确可用寿星公式，但日级对时辰排盘够用
         return (2, 4)
     }
 
-    /// 年柱干支
-    static func yearPillar(year: Int, month: Int, day: Int) -> String {
-        let lc = lichunDate(year: year)
+    /// 年柱干支（分钟级：优先用 JieQiTable 立春精确时刻）
+    static func yearPillar(year: Int, month: Int, day: Int, hour: Int = 12, minute: Int = 0) -> String {
         var y = year
-        // 立春前出生，年柱属上一年
-        if month < lc.month || (month == lc.month && day < lc.day) {
+        if month == 1 {
             y -= 1
+        } else if month > 2 {
+            // 当年立春后
+        } else if let lc = JieQiTable.moment(year: year, index: 0) {
+            let birth = JieQiTable.Moment(month: month, day: day, hour: hour, minute: minute)
+            if birth < lc { y -= 1 }
+        } else if day < 4 {
+            y -= 1   // JSON 缺失时回落：2 月 4 日前
         }
         let idx = (y - 4) % 60
         return liushiJiazi[(idx + 60) % 60]
@@ -88,9 +90,22 @@ enum BaziCalculator {
     /// 月支下标（寅=2 ... 丑=1，对应地支）
     static let jieZhiIndex = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1]
 
-    /// 月柱
-    static func monthPillar(year: Int, month: Int, day: Int) -> String {
-        // 归一化：1 月视作 13 月（小寒在立春之后，避免 1 月干扰遍历顺序）
+    /// 月柱（分钟级：优先用 JieQiTable 十二节精确时刻；缺失时回落到日级近似）
+    static func monthPillar(year: Int, month: Int, day: Int, hour: Int = 12, minute: Int = 0) -> String {
+        if let jie = JieQiTable.jieBoundary(year: year, month: month, day: day, hour: hour, minute: minute) {
+            let zhi = Zhi.all[jie.zhiIndex]
+            // 五虎遁的年干用「该节周期所属的年柱年份」
+            let yearGan = String(yearPillar(year: jie.effectiveYear, month: 6, day: 15).first!)
+            let yinGan = wuhudun(yearGan: yearGan)
+            let offset = (jie.zhiIndex - 2 + 12) % 12
+            let ganIndex = (Gan.all.firstIndex(of: yinGan)! + offset) % 10
+            return Gan.all[ganIndex] + zhi
+        }
+        return legacyMonthPillar(year: year, month: month, day: day)
+    }
+
+    /// 旧版月柱（日级近似，仅作 JieQiTable 缺失时的兜底）
+    private static func legacyMonthPillar(year: Int, month: Int, day: Int) -> String {
         let mm = month >= 2 ? month : month + 12
         var jieIndex = -1
         for (i, jq) in jieQiDates.enumerated() {
@@ -99,14 +114,10 @@ enum BaziCalculator {
                 jieIndex = i
             }
         }
-        // 立春前（2月4日前）出生 → 属于上一年丑月
         let zhiIdx = jieIndex == -1 ? 1 : jieZhiIndex[jieIndex]
         let zhi = Zhi.all[zhiIdx]
-
-        // 年上起月（五虎遁）：年干 → 寅月天干
         let yearGan = String(yearPillar(year: year, month: month, day: day).first!)
         let yinGan = wuhudun(yearGan: yearGan)
-        // 寅月起，推算到当前月支
         let yinIndex = 2 // 寅
         let offset = (zhiIdx - yinIndex + 12) % 12
         let ganIndex = (Gan.all.firstIndex(of: yinGan)! + offset) % 10
@@ -148,10 +159,12 @@ enum BaziCalculator {
     }
 
     /// 时柱
-    static func hourPillar(dayGan: String, hour: Int, minute: Int) -> String {
+    /// 晚子时（23:00-24:00）走流派二（lunar-python 口径）：日柱不变，时柱按次日日干五鼠遁
+    static func hourPillar(dayGan: String, hour: Int, minute: Int, nextDayGan: String? = nil) -> String {
         let zhiIdx = hourZhiIndex(hour: hour, minute: minute)
         let zhi = Zhi.all[zhiIdx]
-        let ziGan = wushudun(dayGan: dayGan)
+        let base = (hour % 24 == 23) ? (nextDayGan ?? dayGan) : dayGan
+        let ziGan = wushudun(dayGan: base)
         let ganIndex = (Gan.all.firstIndex(of: ziGan)! + zhiIdx) % 10
         return Gan.all[ganIndex] + zhi
     }
@@ -163,6 +176,22 @@ enum BaziCalculator {
     static func longitudeOffset(place: String) -> Int {
         let lon = PlaceData.longitude(of: place)
         return Int(round((lon - 120.0) * 4))
+    }
+
+    /// 均时差（分钟）—— 1:1 对齐 paipan.py equation_of_time（标准近似式，误差 <0.5 分钟）
+    /// b = 2π(n-1)/365，n 为年积日（闰年感知）
+    static func equationOfTimeMinute(year: Int, month: Int, day: Int) -> Double {
+        let dim = [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        var n = 0
+        for i in 0..<(month - 1) { n += dim[i] }
+        n += day
+        let b = 2.0 * Double.pi * Double(n - 1) / 365.0
+        return 229.18 * (0.000075 + 0.001868 * cos(b) - 0.032077 * sin(b)
+                         - 0.014615 * cos(2 * b) - 0.040849 * sin(2 * b))
+    }
+
+    static func isLeapYear(_ y: Int) -> Bool {
+        (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
     }
 
     // MARK: - 空亡（旬空）
@@ -693,20 +722,33 @@ enum BaziCalculator {
         let hh = hourParts.count > 0 ? hourParts[0] : 12
         let mm = hourParts.count > 1 ? hourParts[1] : 0
 
-        // 真太阳时（可关闭：关闭时按北京时间排盘）
-        let lonOffset = useTrueSolar ? longitudeOffset(place: place) : 0
-        let trueTotalMinutes = hh * 60 + mm + lonOffset
-        let trueHour = (trueTotalMinutes / 60 + 24) % 24
-        let trueMinute = (trueTotalMinutes % 60 + 60) % 60
+        // 真太阳时（可关闭）：钟表 + 经度差 + 均时差，**日期整体平移**（对齐 lunar-python 口径）
+        // 乌鲁木齐 00:10 → 真太阳时 1999-12-31 21:58：四柱全部按平移后的日期时间推算
+        let lon = useTrueSolar ? PlaceData.longitude(of: place) : 120.0
+        let lonDeltaMin = (lon - 120.0) * 4.0
+        // 均时差按「经度平移后」的日期取年积日（与 paipan.py 一致）
+        let midDayRoll = Int(floor((Double(hh) * 60 + Double(mm) + lonDeltaMin) / 1440.0))
+        let midDate = dateFromJDN(julianDay(year: year, month: month, day: day) + midDayRoll)
+        let eotMin = useTrueSolar ? equationOfTimeMinute(year: midDate.year, month: midDate.month, day: midDate.day) : 0.0
+        let totalMin = Double(hh) * 60 + Double(mm) + lonDeltaMin + eotMin
+        let dayRoll = Int(floor(totalMin / 1440.0))
+        let inDayMin = Int(totalMin - Double(dayRoll) * 1440.0)
+        let tsDate = dateFromJDN(julianDay(year: year, month: month, day: day) + dayRoll)
+        let trueHour = inDayMin / 60
+        let trueMinute = inDayMin % 60
         let trueSolarTime = String(format: "%02d:%02d", trueHour, trueMinute)
 
-        // 四柱
-        let yp = yearPillar(year: year, month: month, day: day)
-        let mp = monthPillar(year: year, month: month, day: day)
-        let jdn = julianDay(year: year, month: month, day: day)
+        // 四柱：一律用平移后的完整日期时间（关闭校正时平移量为零，等价钟表时间）
+        let pyY = useTrueSolar ? tsDate.year : year
+        let pyM = useTrueSolar ? tsDate.month : month
+        let pyD = useTrueSolar ? tsDate.day : day
+        let yp = yearPillar(year: pyY, month: pyM, day: pyD, hour: trueHour, minute: trueMinute)
+        let mp = monthPillar(year: pyY, month: pyM, day: pyD, hour: trueHour, minute: trueMinute)
+        let jdn = julianDay(year: pyY, month: pyM, day: pyD)
         let dp = liushiJiazi[dayPillarIndex(jdn: jdn)]
         let dayGan = String(dp.first!)
-        let hp = hourPillar(dayGan: dayGan, hour: trueHour, minute: trueMinute)
+        let nextDayGan = String(liushiJiazi[dayPillarIndex(jdn: jdn + 1)].first!)
+        let hp = hourPillar(dayGan: dayGan, hour: trueHour, minute: trueMinute, nextDayGan: nextDayGan)
 
         // 神煞（逐柱归属 + 吉凶表）
         let ssDetail = shenShaDetail(dayPillar: dp, yearPillar: yp, monthPillar: mp, hourPillar: hp)
@@ -786,7 +828,7 @@ enum BaziCalculator {
 
         return BaziChart(
             name: name, gender: gender, solarDate: solarDate, hour: hour, place: place,
-            trueSolarTime: trueSolarTime, longitudeOffset: lonOffset,
+            trueSolarTime: trueSolarTime, longitudeOffset: Int(lonDeltaMin.rounded()),
             shengxiao: shengxiao, xingzuo: xingzuo, lunarDate: lunarDate,
             jieQiDetail: jieQiDetailStr, taiYuan: taiYuanFull, taiXi: taiXiStr,
             mingGong: mingGongStr, shenGong: shenGongStr,

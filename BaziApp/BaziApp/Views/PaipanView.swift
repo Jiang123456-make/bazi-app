@@ -380,8 +380,8 @@ struct PaipanView: View {
         }
         let hp = h.hour.split(separator: ":").compactMap { Int($0) }
         let hh = hp.first ?? 12
-        // 从 index 1 起匹配时辰（0 是「时辰未知」，与午时同为 12 点）
-        personA.shichenIdx = (BirthOptions.shichenList.dropFirst().firstIndex { $0.hour == hh } ?? 6) + 1
+        // 从 index 1 起匹配时辰（0 是「时辰未知」；按小时数定位，早子/晚子各自命中）
+        personA.shichenIdx = (BirthOptions.shichenList.dropFirst().firstIndex { $0.hour == hh } ?? 7) + 1
         place = h.place
         useTrueSolar = h.useTrueSolar
         generate()
@@ -417,8 +417,8 @@ struct BirthInput {
     var lunarYIdx = 90
     var lunarMIdx = 3       // 四月
     var lunarDIdx = 20      // 廿一
-    /// 0 = 时辰未知，1-12 = 子时～亥时
-    var shichenIdx = 7      // 午时
+    /// 0 = 时辰未知，1-14 = 早子/晚子/丑…亥
+    var shichenIdx = 8      // 午时
 
     var solarYear: Int { BirthOptions.years[solarYIdx] }
     var solarMonth: Int { solarMIdx + 1 }
@@ -467,7 +467,7 @@ enum BirthOptions {
         let isLeap: Bool
     }
 
-    /// 时辰表（index 0 = 时辰未知，按午时试排）
+    /// 时辰表（index 0 = 时辰未知，按午时试排；子时拆早/晚两段——晚子时 23 点时柱按次日干）
     struct ShiChen {
         let name: String
         let hour: Int
@@ -475,7 +475,8 @@ enum BirthOptions {
     }
     static let shichenList: [ShiChen] = [
         ShiChen(name: "时辰未知", hour: 12, range: "按午时试排"),
-        ShiChen(name: "子时", hour: 0,  range: "23:00-00:59"),
+        ShiChen(name: "早子时", hour: 0,  range: "00:00-00:59"),
+        ShiChen(name: "晚子时", hour: 23, range: "23:00-23:59"),
         ShiChen(name: "丑时", hour: 1,  range: "01:00-02:59"),
         ShiChen(name: "寅时", hour: 3,  range: "03:00-04:59"),
         ShiChen(name: "卯时", hour: 5,  range: "05:00-06:59"),
@@ -602,27 +603,48 @@ private struct BirthWheelCard: View {
         $0.name == "时辰未知" ? "未知 · 按午时试排" : "\($0.name) \($0.range)"
     }
 
-    /// 真太阳时提示（含换算量与实际采用的时辰；关闭时说明按北京时间）
+    /// 真太阳时提示：经度差 + 均时差 + 实际采用的时辰（与引擎口径一致）
     private var hint: String {
         let sc = BirthOptions.shichenList[input.shichenIdx]
         if !useTrueSolar {
             return "\(sc.name) \(sc.range) · 按北京时间排盘（未校正）"
         }
-        let offset = BaziCalculator.longitudeOffset(place: place)
-        let total = (sc.hour * 60 + offset + 24 * 60) % (24 * 60)
-        let h = total / 60
-        // 与引擎口径一致：真太阳时小时直接定夺时柱所在时辰
+        let lon = PlaceData.longitude(of: place)
+        let lonDelta = (lon - 120.0) * 4.0
+        let eot = BaziCalculator.equationOfTimeMinute(year: input.solarYear, month: input.solarMonth, day: input.solarDay)
+        let total = sc.hour * 60 + Int((lonDelta + eot).rounded())
+        let h = ((total / 60) % 24 + 24) % 24
+        let m = ((total % 60) + 60) % 60
+        // 与引擎一致：真太阳时小时直接定夺时柱所在时辰
         let effIdx: Int
         if h == 23 {
-            effIdx = 1  // 23 点属子时
+            effIdx = 2  // 晚子时
         } else {
-            effIdx = BirthOptions.shichenList.firstIndex { $0.name != "时辰未知" && h >= $0.hour && h < $0.hour + 2 } ?? 7
+            // 早子时只覆盖 0 点（1 小时），其余时辰按 2 小时窗匹配
+            effIdx = BirthOptions.shichenList.firstIndex {
+                guard $0.name != "时辰未知", $0.name != "晚子时" else { return false }
+                return $0.name == "早子时" ? h == 0 : (h >= $0.hour && h < $0.hour + 2)
+            } ?? 8
         }
         let eff = BirthOptions.shichenList[effIdx]
         let effNote = eff.name == sc.name ? "时辰不变" : "实际按\(eff.name)排盘"
-        return String(format: "%@ %@ · 真太阳时 %02d:%02d（%@%d 分）· %@",
-                      sc.name, sc.range, h, total % 60,
-                      offset >= 0 ? "+" : "-", abs(offset), effNote)
+        var note = String(format: "%@ %@ · 真太阳时 %02d:%02d（经度差%+.0f 均时差%+.0f 分）· %@",
+                          sc.name, sc.range, h, m, lonDelta, eot, effNote)
+        if let dst = Self.dstNote(year: input.solarYear, month: input.solarMonth, day: input.solarDay) {
+            note = dst + " · " + note
+        }
+        return note
+    }
+
+    /// 1986-1991 夏令时提示（引擎不自动拨钟，与权威口径一致；提醒用户换算）
+    static func dstNote(year: Int, month: Int, day: Int) -> String? {
+        guard year >= 1986 && year <= 1991 else { return nil }
+        let start: (Int, Int) = year == 1986 ? (5, 4) : (4, 10)
+        let end: (Int, Int) = (9, 20)
+        if (month, day) >= start && (month, day) <= end {
+            return "〔夏令时〕此时期钟表拨快 1 小时，若时间取自当年钟表请减 1 小时输入"
+        }
+        return nil
     }
 
     private func wheelPicker(_ label: String, items: [String], selection: Binding<Int>,
