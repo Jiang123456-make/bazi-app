@@ -50,16 +50,20 @@ final class SmokeTests: XCTestCase {
         let field = app.textFields["输入你的问题…"]
         if field.waitForExistence(timeout: 5) {
             field.tap()
-            sleep(2)
-            shot(app, "06-键盘弹出")
-            let done = app.buttons["完成"]
-            if done.waitForExistence(timeout: 3) {
-                done.tap()
-                sleep(2)
+            let kb = app.keyboards.firstMatch
+            if kb.waitForExistence(timeout: 5) {
+                shot(app, "06-键盘弹出")
+                let done = app.buttons["完成"]
+                if done.waitForExistence(timeout: 3) {
+                    done.tap()
+                }
+                // 等键盘真正消失（最长 5 秒）
+                let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: kb)
+                wait(for: [gone], timeout: 5)
+                shot(app, "07-键盘收起后")
+                XCTAssertFalse(kb.exists, "点「完成」后键盘应已收起")
+                XCTAssertTrue(app.tabBars.buttons["我的"].isHittable, "tabBar 应可点（键盘陷阱修复验证）")
             }
-            shot(app, "07-键盘收起后")
-            XCTAssertFalse(field.hasKeyboardFocus, "点「完成」后键盘应已收起")
-            XCTAssertTrue(app.tabBars.buttons["我的"].isHittable, "tabBar 应可点（键盘陷阱修复验证）")
         }
 
         // ⑥ 我的页：等后台自检跑完出 490/490
