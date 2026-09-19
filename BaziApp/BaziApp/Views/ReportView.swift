@@ -208,7 +208,7 @@ struct ReportView: View {
                     Text(dy.shiShen).font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
                     Text("星运\(dy.xingYun)").font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                     Spacer()
-                    Text("\(dy.startAge)-\(dy.endAge)岁 · \(dy.startYear)-\(dy.endYear)")
+                    Text(verbatim: "\(dy.startAge)-\(dy.endAge)岁 · \(dy.startYear)-\(dy.endYear)")
                         .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
@@ -304,7 +304,7 @@ struct ReportView: View {
                     let grade = fortuneGrade(ln.shiShen)
                     let isNow = ln.year == currentYear
                     VStack(spacing: 2) {
-                        Text("\(ln.year)").font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
+                        Text(verbatim: "\(ln.year)").font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
                         Text(ln.ganzhi)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(isNow ? BaziTheme.actionBlue : BaziTheme.ink)
@@ -335,7 +335,7 @@ struct ReportView: View {
                 Text("今年宜忌").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                 Spacer()
                 if let now = c.liunian.first(where: { $0.year == currentYear }) {
-                    Text("\(now.year) · \(now.ganzhi) \(now.shiShen)主事")
+                    Text(verbatim: "\(now.year) · \(now.ganzhi) \(now.shiShen)主事")
                         .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
                 }
             }

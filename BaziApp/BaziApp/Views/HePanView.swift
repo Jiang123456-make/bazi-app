@@ -21,6 +21,9 @@ struct HePanView: View {
         .background(BaziTheme.canvas)
         .navigationTitle("合盘")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(BaziTheme.canvas, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { saveResult() } label: {

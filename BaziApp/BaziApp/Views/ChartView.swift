@@ -49,6 +49,11 @@ struct ChartView: View {
             }
         }
         .background(BaziTheme.canvas)
+        .navigationTitle("命盘")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(BaziTheme.canvas, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
     }
 
     // MARK: - 头部（问真式：黑色通栏 + 金页签 + 金圈头像信息条 + 金 chips）
@@ -515,14 +520,14 @@ struct ChartView: View {
             if chart.currentDayunIndex < chart.dayun.count {
                 let cur = chart.dayun[chart.currentDayunIndex]
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("\(cur.ganzhi) 大运 · \(cur.startYear)-\(cur.endYear)")
+                    Text(verbatim: "\(cur.ganzhi) 大运 · \(cur.startYear)-\(cur.endYear)")
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(BaziTheme.ink)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
                         ForEach(cur.liunian, id: \.year) { ln in
                             let isNow = ln.year == currentYear
                             VStack(spacing: 2) {
-                                Text("\(ln.year)").font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
+                                Text(verbatim: "\(ln.year)").font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
                                 Text(ln.ganzhi)
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(isNow ? BaziTheme.actionBlue : BaziTheme.ink)

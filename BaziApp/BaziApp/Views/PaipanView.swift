@@ -27,8 +27,7 @@ struct PaipanView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(spacing: 16) {
-                        header
+                    VStack(spacing: 16) {                        header
                         dailyCard
                         recentStrip
                         modeCard
@@ -45,10 +44,14 @@ struct PaipanView: View {
                     }
                     .padding(.bottom, 12)
                 }
+                .scrollDismissesKeyboard(.interactively)
 
                 // 底部常驻操作区：排盘/合盘随时可点，不用滚回页面中间
                 VStack(spacing: 2) {
-                    Button(action: { hepanMode ? generateHePan() : generate() }) {
+                    Button(action: {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        hepanMode ? generateHePan() : generate()
+                    }) {
                         Text(hepanMode ? "开始合盘" : "开始排盘")
                             .font(BaziTheme.kai(18))
                             .foregroundStyle(BaziTheme.goldOnBlack)
@@ -496,6 +499,8 @@ private struct BirthWheelCard: View {
     let place: String
     let useTrueSolar: Bool
 
+    @FocusState private var nameFocused: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let title {
@@ -509,6 +514,9 @@ private struct BirthWheelCard: View {
                         .multilineTextAlignment(.trailing)
                         .font(BaziTheme.body())
                         .foregroundStyle(BaziTheme.ink)
+                        .focused($nameFocused)
+                        .submitLabel(.done)
+                        .onSubmit { nameFocused = false }
                 }
                 cardDivider()
                 formRow("性别") {
@@ -533,21 +541,32 @@ private struct BirthWheelCard: View {
             .baziCard()
 
             VStack(spacing: 0) {
+                // 列头（与下方滚轮等宽对齐）
+                HStack(spacing: 0) {
+                    Text("年").frame(width: 80)
+                    Text("月").frame(width: 48)
+                    Text("日").frame(width: 48)
+                    Text("时辰").frame(maxWidth: .infinity)
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(BaziTheme.tertiary)
+                .padding(.top, 10)
+
                 HStack(spacing: 0) {
                     if input.isLunar {
-                        wheelPicker("年", items: BirthOptions.years.map { "\($0)年" }, selection: $input.lunarYIdx)
-                        wheelPicker("月", items: input.lunarMonths.map(\.name), selection: $input.lunarMIdx)
+                        wheelPicker("年", items: BirthOptions.years.map { String($0) }, selection: $input.lunarYIdx, width: 80)
+                        wheelPicker("月", items: input.lunarMonths.map(\.name), selection: $input.lunarMIdx, width: 48)
                         wheelPicker("日", items: (1...max(input.lunarDayCount, 1)).map { LunarCalendar.dayName($0) },
-                                    selection: $input.lunarDIdx)
+                                    selection: $input.lunarDIdx, width: 48)
                     } else {
-                        wheelPicker("年", items: BirthOptions.years.map { "\($0)年" }, selection: $input.solarYIdx)
-                        wheelPicker("月", items: (1...12).map { "\($0)月" }, selection: $input.solarMIdx)
-                        wheelPicker("日", items: (1...input.solarDayCount).map { "\($0)日" }, selection: $input.solarDIdx)
+                        wheelPicker("年", items: BirthOptions.years.map { String($0) }, selection: $input.solarYIdx, width: 80)
+                        wheelPicker("月", items: (1...12).map { String($0) }, selection: $input.solarMIdx, width: 48)
+                        wheelPicker("日", items: (1...input.solarDayCount).map { String($0) }, selection: $input.solarDIdx, width: 48)
                     }
                     wheelPicker("时辰", items: Self.shichenWheelItems, selection: $input.shichenIdx,
-                                width: 154, fontSize: 13)
+                                fontSize: 13)
                 }
-                .frame(height: 118)
+                .frame(height: 132)
 
                 Rectangle().fill(BaziTheme.divider).frame(height: 1).padding(.horizontal, 16)
 
@@ -568,6 +587,14 @@ private struct BirthWheelCard: View {
             .onChange(of: input.lunarMIdx) { _ in clampLunar() }
         }
         .padding(.horizontal, 20)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") { nameFocused = false }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(BaziTheme.actionBlue)
+            }
+        }
     }
 
     /// 时辰滚轮条目：时辰名 + 24 小时制时段（如「午时 11:00-12:59」）
@@ -575,21 +602,31 @@ private struct BirthWheelCard: View {
         $0.name == "时辰未知" ? "未知 · 按午时试排" : "\($0.name) \($0.range)"
     }
 
-    /// 真太阳时提示（含换算量；关闭时说明按北京时间）
+    /// 真太阳时提示（含换算量与实际采用的时辰；关闭时说明按北京时间）
     private var hint: String {
         let sc = BirthOptions.shichenList[input.shichenIdx]
         if !useTrueSolar {
-            return "\(sc.name) \(sc.range) · 已关闭校正，按北京时间排盘"
+            return "\(sc.name) \(sc.range) · 按北京时间排盘（未校正）"
         }
         let offset = BaziCalculator.longitudeOffset(place: place)
         let total = (sc.hour * 60 + offset + 24 * 60) % (24 * 60)
-        return String(format: "%@ %@ · 真太阳时 %02d:%02d（%@%d 分）",
-                      sc.name, sc.range, total / 60, total % 60,
-                      offset >= 0 ? "+" : "-", abs(offset))
+        let h = total / 60
+        // 与引擎口径一致：真太阳时小时直接定夺时柱所在时辰
+        let effIdx: Int
+        if h == 23 {
+            effIdx = 1  // 23 点属子时
+        } else {
+            effIdx = BirthOptions.shichenList.firstIndex { $0.name != "时辰未知" && h >= $0.hour && h < $0.hour + 2 } ?? 7
+        }
+        let eff = BirthOptions.shichenList[effIdx]
+        let effNote = eff.name == sc.name ? "时辰不变" : "实际按\(eff.name)排盘"
+        return String(format: "%@ %@ · 真太阳时 %02d:%02d（%@%d 分）· %@",
+                      sc.name, sc.range, h, total % 60,
+                      offset >= 0 ? "+" : "-", abs(offset), effNote)
     }
 
     private func wheelPicker(_ label: String, items: [String], selection: Binding<Int>,
-                             width: CGFloat? = nil, fontSize: CGFloat = 15) -> some View {
+                             width: CGFloat? = nil, fontSize: CGFloat = 17) -> some View {
         let picker = Picker(label, selection: selection) {
             ForEach(items.indices, id: \.self) { i in
                 Text(items[i])
@@ -606,7 +643,7 @@ private struct BirthWheelCard: View {
                 picker.frame(maxWidth: .infinity)
             }
         }
-        .frame(height: 118)
+        .frame(height: 132)
         .clipped()
     }
 
