@@ -20,6 +20,8 @@ struct PaipanView: View {
     @State private var showPlacePicker = false
     @State private var history: [PaipanEntry] = []
     @State private var hePanResult: HePanResult? = nil
+    /// 今日干支（今日指南卡数据源；onAppear 懒加载）
+    @State private var daily: BaziChart? = nil
 
     var body: some View {
         NavigationStack {
@@ -27,6 +29,7 @@ struct PaipanView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         header
+                        dailyCard
                         recentStrip
                         modeCard
 
@@ -47,17 +50,18 @@ struct PaipanView: View {
                 VStack(spacing: 2) {
                     Button(action: { hepanMode ? generateHePan() : generate() }) {
                         Text(hepanMode ? "开始合盘" : "开始排盘")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .font(BaziTheme.kai(18))
+                            .foregroundStyle(BaziTheme.goldOnBlack)
+                            .kerning(4)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .background(BaziTheme.actionBlue)
+                            .background(BaziTheme.blackPill)
                             .clipShape(Capsule())
                     }
                     Button(action: { loadDemo() }) {
                         Text(hepanMode ? "试排示例（双方 demo 数据）" : "试排示例（用 demo 数据）")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(BaziTheme.actionBlue)
+                            .foregroundStyle(BaziTheme.goldDeep)
                             .padding(.vertical, 6)
                     }
                     Text("命理分析仅供文化娱乐参考，不构成决策依据")
@@ -121,8 +125,14 @@ struct PaipanView: View {
     private var dailyCard: some View {
         if let d = daily {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("今日指南").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
+                HStack(spacing: 8) {
+                    Text("今")
+                        .font(BaziTheme.kai(12))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(BaziTheme.actionBlue)
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    Text("今日 · 指南").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
                     Spacer()
                     Text(d.solarDate).font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
                 }

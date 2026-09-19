@@ -71,13 +71,14 @@ struct ReportView: View {
     // MARK: - 综合评分卡（浅色）
 
     private func scoreCard(_ c: BaziChart) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let result = ChartScore.evaluate(c)
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(score)").font(.system(size: 44, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-                Text("分 · 综合运势\(level)").font(.system(size: 15)).foregroundStyle(BaziTheme.secondary)
+                Text("\(result.total)").font(.system(size: 44, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                Text("分 · 综合\(result.level)").font(.system(size: 15)).foregroundStyle(BaziTheme.secondary)
                 Spacer()
                 Text(c.strength)
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(BaziTheme.actionBlue)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(BaziTheme.goldDeep)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(BaziTheme.dayColumn).clipShape(Capsule())
             }
@@ -86,6 +87,24 @@ struct ReportView: View {
             if !c.strengthNote.isEmpty {
                 Text(c.strengthNote).font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
             }
+            // 四维评分进度条
+            VStack(spacing: 9) {
+                ForEach(result.parts, id: \.name) { p in
+                    VStack(spacing: 4) {
+                        HStack {
+                            Text(p.name).font(.system(size: 12.5)).foregroundStyle(BaziTheme.ink)
+                            Spacer()
+                            Text("\(p.score)/\(p.full)").font(.system(size: 11.5)).foregroundStyle(BaziTheme.tertiary)
+                        }
+                        ProgressView(value: Double(p.score), total: Double(p.full))
+                            .progressViewStyle(.linear)
+                            .tint(BaziTheme.actionBlue)
+                    }
+                }
+            }
+            .padding(.top, 2)
+            Text("评分口径：五行流通 · 用神有力 · 格局层次 · 调候得宜，仅供文化参考")
+                .font(.system(size: 10.5)).foregroundStyle(BaziTheme.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -357,9 +376,6 @@ struct ReportView: View {
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(bg).clipShape(Capsule())
     }
-
-    private var score: Int { 82 }
-    private var level: String { "中上" }
 
     /// 按今年（流年干支）十神生成宜忌与一句话提示（与首页「今日指南」共用 TenGodGuide）
     private func shiShenGuide(_ c: BaziChart) -> (yi: [String], ji: [String], tip: String) {
