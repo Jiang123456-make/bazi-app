@@ -568,7 +568,8 @@ enum BaziCalculator {
     /// 对拍 lunar-python 5/5
     static func shenGong(monthZhi: String, hourZhi: String, yearGan: String) -> String {
         let mi = gongMonthZhi.firstIndex(of: monthZhi) ?? 1
-        let ti = Zhi.all.firstIndex(of: hourZhi) ?? 0
+        // 身宫时支序：经典「子=1、丑=2…亥=12」口径（云端 UI 测试对拍 4 例实锤：子=0 口径全差一位）
+        let ti = (Zhi.all.firstIndex(of: hourZhi) ?? -1) + 1
         var offset = mi + ti
         if offset > 12 { offset -= 12 }
         return gongGan(yearGan: yearGan, offset: offset) + gongMonthZhi[offset]

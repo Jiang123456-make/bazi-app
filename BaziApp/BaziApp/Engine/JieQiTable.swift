@@ -10,9 +10,10 @@ enum JieQiTable {
         let day: Int
         let hour: Int
         let minute: Int
+        var second: Int = 0
 
         static func < (l: Moment, r: Moment) -> Bool {
-            (l.month, l.day, l.hour, l.minute) < (r.month, r.day, r.hour, r.minute)
+            (l.month, l.day, l.hour, l.minute, l.second) < (r.month, r.day, r.hour, r.minute, r.second)
         }
     }
 
@@ -28,10 +29,13 @@ enum JieQiTable {
     static var isLoaded: Bool { !table.isEmpty }
 
     /// year 年第 index 个节的精确时刻（0=立春…10=大雪 在当年；11=小寒 在当年 1 月）
+    /// v2 格式含秒 [m,d,h,mi,s]；v1（4 元素）视为秒=0
     static func moment(year: Int, index: Int) -> Moment? {
         guard let arr = table[String(year)], index >= 0, index < arr.count,
-              arr[index].count == 4 else { return nil }
-        return Moment(month: arr[index][0], day: arr[index][1], hour: arr[index][2], minute: arr[index][3])
+              arr[index].count == 4 || arr[index].count == 5 else { return nil }
+        let sec = arr[index].count == 5 ? arr[index][4] : 0
+        return Moment(month: arr[index][0], day: arr[index][1],
+                      hour: arr[index][2], minute: arr[index][3], second: sec)
     }
 
     /// 年柱的有效年份：立春精确时刻前出生属上一年
