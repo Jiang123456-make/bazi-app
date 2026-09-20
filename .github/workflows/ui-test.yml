@@ -50,6 +50,14 @@ jobs:
           path: /tmp/lingxi-shots
           if-no-files-found: warn
 
+      - name: 上传崩溃报告
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lingxi-crashlogs
+          path: ~/Library/Logs/DiagnosticReports/*.ips
+          if-no-files-found: ignore
+
       - name: 上传测试结果
         uses: actions/upload-artifact@v4
         if: always()
