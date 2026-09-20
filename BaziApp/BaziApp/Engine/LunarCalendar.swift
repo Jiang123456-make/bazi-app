@@ -66,6 +66,7 @@ enum LunarCalendar {
 
     /// 某农历年总天数
     static func yearDays(_ year: Int) -> Int {
+        guard year >= 1900 && year < 2100 else { return 365 } // 表外年份按平年处理（防查表越界）
         var sum = 348 // 12 个月 × 29 天
         var i = 0x8000
         while i > 0x8 {
@@ -83,6 +84,10 @@ enum LunarCalendar {
         let baseJDN = BaziCalculator.julianDay(year: 1900, month: 1, day: 31)
         let targetJDN = BaziCalculator.julianDay(year: year, month: month, day: day)
         var offset = targetJDN - baseJDN
+
+        // 早于 1900-01-31（农历表锚点）：钳回正月初一，避免负日数越界崩溃
+        // （排盘 UI 限 1900-2099，对拍用例含 1900-01-01 等表外日期，引擎必须防崩）
+        guard offset >= 0 else { return (1900, 1, 1, false) }
 
         // 定位农历年
         var lunarYear = 1900
@@ -117,14 +122,17 @@ enum LunarCalendar {
         if offset < 0 { offset += temp; i -= 1 }
 
         lunarMonth = i
-        return (lunarYear, lunarMonth, offset + 1, isLeap)
+        return (lunarYear, max(1, min(12, lunarMonth)), max(1, min(30, offset + 1)), isLeap)
     }
 
     /// 农历日期字符串（如「庚午年 四月十一」或「闰四月十一」）
     static func lunarString(solarYear: Int, month: Int, day: Int, ganzhiYear: String) -> String {
         let l = solarToLunar(year: solarYear, month: month, day: day)
-        let monthStr = (l.isLeap ? "闰" : "") + monthNames[l.month - 1] + "月"
-        let dayStr = dayNames[l.day - 1]
+        // 防御钳制：表外日期的农历换算可能给出边界值，杜绝下标越界
+        let m = max(1, min(12, l.month))
+        let d = max(1, min(30, l.day))
+        let monthStr = (l.isLeap ? "闰" : "") + monthNames[m - 1] + "月"
+        let dayStr = dayNames[d - 1]
         return "\(ganzhiYear)年 \(monthStr)\(dayStr)"
     }
 
