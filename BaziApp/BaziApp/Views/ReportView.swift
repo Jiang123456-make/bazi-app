@@ -386,14 +386,27 @@ struct ReportView: View {
     // MARK: - 空状态
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 40)).foregroundStyle(BaziTheme.placeholder)
-            Text("请先在「排盘」页生成命盘")
-                .font(BaziTheme.body()).foregroundStyle(BaziTheme.secondary)
+            Text("还没有命盘")
+                .font(BaziTheme.title(16)).foregroundStyle(BaziTheme.ink)
+            Text("输入出生信息，30 秒生成专属八字报告")
+                .font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
+            Button {
+                NotificationCenter.default.post(name: ContentView.goPaipanNotification, object: nil)
+            } label: {
+                Text("去排盘")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(BaziTheme.goldOnBlack)
+                    .frame(width: 140, height: 42)
+                    .background(BaziTheme.blackPill)
+                    .clipShape(Capsule())
+            }
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 80)
+        .padding(.vertical, 70)
     }
 
     // MARK: - 辅助

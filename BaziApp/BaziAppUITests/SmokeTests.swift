@@ -1,8 +1,8 @@
 import XCTest
 
 /// 灵犀真机（模拟器）冒烟测试：
-/// 实际启动 App → 试排示例（自动排盘并跳转命盘页）→ 返回 → 报告 → 顾问（键盘陷阱验证）
-/// → 我的（自检 490/490）→ 词典。逐屏截图存 /tmp/lingxi-shots，CI 上传为 artifacts。
+/// 启动（首次引导）→ 试排示例（自动排盘并跳转命盘页）→ 返回 → 报告 → 顾问（键盘陷阱验证）
+/// → 我的（自检 490/490 + 展开详情）→ 词典。逐屏截图存 /tmp/lingxi-shots，CI 上传为 artifacts。
 final class SmokeTests: XCTestCase {
 
     private func shot(_ app: XCUIApplication, _ name: String) {
@@ -16,6 +16,18 @@ final class SmokeTests: XCTestCase {
     func testFullWalkthrough() throws {
         let app = XCUIApplication()
         app.launch()
+
+        // ⓪ 首次启动引导（3 页）：跳过或走到最后
+        let skip = app.buttons["跳过"]
+        let start = app.buttons["开始使用"]
+        if skip.waitForExistence(timeout: 5) {
+            shot(app, "00-引导页")
+            skip.tap()
+            sleep(1)
+        } else if start.exists {
+            start.tap()
+            sleep(1)
+        }
 
         // ① 排盘页
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10), "App 应启动并显示 TabBar")
@@ -67,21 +79,19 @@ final class SmokeTests: XCTestCase {
             }
         }
 
-        // ⑥ 我的页：等后台自检跑完出 490/490
+        // ⑥ 我的页：后台自检出 490/490（功能入口 badge），展开详情查看
         app.tabBars.buttons["我的"].tap()
-        let passed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '490'")).firstMatch
+        let passed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '490/490'")).firstMatch
         _ = passed.waitForExistence(timeout: 120)
         shot(app, "08-我的-自检结果")
-        // 严格断言 490/490；未满分则把失败明细打印到日志（「期望 …，实际 …」行）
-        let perfect = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '490/490'")).firstMatch
-        if !perfect.waitForExistence(timeout: 10) {
-            let fails = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '，实际'"))
-            let n = min(fails.count, 12)
-            for i in 0..<n {
-                print("SELFCHECK-FAIL[\(i)]:", fails.element(boundBy: i).label)
-            }
+        XCTAssertTrue(passed.exists, "自检 badge 应出现 490/490（后台异步校验完成）")
+        // 展开自检详情卡
+        let checkEntry = app.buttons.matching(NSPredicate(format: "label CONTAINS '引擎自检'")).firstMatch
+        if checkEntry.waitForExistence(timeout: 5) {
+            checkEntry.tap()
+            sleep(1)
+            shot(app, "08b-自检详情展开")
         }
-        XCTAssertTrue(perfect.exists, "自检卡应出现 490/490（后台异步校验完成）")
 
         // ⑦ 词典入口打开
         let glossary = app.buttons.matching(NSPredicate(format: "label CONTAINS '术语词典'")).firstMatch

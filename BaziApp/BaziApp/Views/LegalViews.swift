@@ -51,6 +51,12 @@ struct PrivacySheet: View {
 
 struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
+    /// ICP 备案号：备案通过后填入即自动展示（不必再改布局）
+    private static let icpNumber: String? = nil
+
+    @State private var devTaps = 0
+    @State private var showDevInfo = false
+    @State private var check: BaziSelfCheck.Result?
 
     private var versionText: String {
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -80,10 +86,58 @@ struct AboutSheet: View {
                 card {
                     aboutRow("版本", versionText)
                     Divider().overlay(BaziTheme.divider)
-                    aboutRow("备案号", "待备案通过后展示")
-                    Divider().overlay(BaziTheme.divider)
+                    if let icp = Self.icpNumber {
+                        aboutRow("备案号", icp)
+                        Divider().overlay(BaziTheme.divider)
+                    }
                     aboutRow("内容口径", "仅供文化参考")
                 }
+
+                if showDevInfo {
+                    devCard
+                }
+            }
+            .onAppear {
+                if check == nil {
+                    Task.detached(priority: .utility) {
+                        let result = BaziSelfCheck.run()
+                        await MainActor.run { self.check = result }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 开发者模式：连点版本号 7 次解锁引擎自检详情（调试卡不暴露给普通用户）
+    private var devCard: some View {
+        card {
+            HStack {
+                Text("引擎自检").font(.system(size: 15, weight: .semibold)).foregroundStyle(BaziTheme.ink)
+                Spacer()
+                Text(check.map { $0.summary } ?? "校验中…")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(check.map { $0.passed == $0.total } ?? true ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+            }
+            if let check {
+                ForEach(check.items.filter { !$0.ok }.isEmpty
+                        ? Array(check.items.prefix(6))
+                        : check.items.filter { !$0.ok },
+                        id: \.name) { item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(item.ok ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                            .padding(.top, 1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.name).font(.system(size: 12)).foregroundStyle(BaziTheme.ink)
+                            Text(item.detail).font(.system(size: 10)).foregroundStyle(BaziTheme.secondary)
+                        }
+                    }
+                }
+                Text("对拍基线：历法事实锚点 / 立春节气交界 / 晚子时 / 极端经度 / 大运起运 / 命宫身宫。")
+                    .font(.system(size: 10)).foregroundStyle(BaziTheme.tertiary)
+            } else {
+                Text("正在后台校验…").font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
             }
         }
     }
@@ -92,7 +146,14 @@ struct AboutSheet: View {
         HStack {
             Text(label).font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
             Spacer()
-            Text(value).font(.system(size: 14)).foregroundStyle(BaziTheme.secondary)
+            Text(value)
+                .font(.system(size: 14)).foregroundStyle(BaziTheme.secondary)
+                .onTapGesture {
+                    if label == "版本" {
+                        devTaps += 1
+                        if devTaps >= 7 { showDevInfo = true }
+                    }
+                }
         }
         .padding(.vertical, 4)
     }

@@ -3,14 +3,17 @@ import SwiftUI
 /// 屏 5：我的（v5.1：功能入口全部接通 + 设置真实化 + 命盘摘要/历史/合盘/自检保留）
 struct ProfileView: View {
     let chart: BaziChart?
+    @Environment(\.openURL) private var openURL
 
     // MARK: - 状态（此前缺失声明导致编译失败的三个补齐）
 
     @State private var ppList: [PaipanEntry] = []
     @State private var hpList: [HePanEntry] = []
     @State private var showClearDialog = false
-    /// 自检结果异步加载（486 例全量排盘较重，严禁在 body 内同步执行——会卡死主线程）
+    /// 自检结果异步加载（490 例全量排盘较重，严禁在 body 内同步执行——会卡死主线程）
     @State private var check: BaziSelfCheck.Result?
+    /// 自检卡展开详情（默认折叠成一行信任标识）
+    @State private var showCheckDetail = false
 
     // 功能入口 / 设置 Sheet
     @State private var showGlossary = false
@@ -87,7 +90,10 @@ struct ProfileView: View {
                             funcEntry(icon: "checkmark.seal", title: "引擎自检",
                                       sub: "排盘引擎正确性锚点校验",
                                       badge: check.map { "\($0.passed)/\($0.total)" } ?? "校验中",
-                                      badgeGood: check.map { $0.passed == $0.total } ?? true) { scrollTo(proxy, "selfcheck") }
+                                      badgeGood: check.map { $0.passed == $0.total } ?? true) {
+                                showCheckDetail = true
+                                scrollTo(proxy, "selfcheck")
+                            }
                         }
                         .padding(16)
                         .baziCard()
@@ -112,41 +118,52 @@ struct ProfileView: View {
                             .padding(.horizontal, 20)
                         }
 
-                        // 排盘引擎自检（异步结果，未就绪时显示占位）
+                        // 引擎校验（默认折叠一行信任标识，点开看详情；调试卡不暴露给普通用户）
                         VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("引擎自检").font(BaziTheme.title(15)).foregroundStyle(BaziTheme.ink)
-                                Spacer()
-                                Text(check.map { $0.summary } ?? "校验中…")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(check.map { $0.passed == $0.total } ?? true ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                            Button {
+                                withAnimation { showCheckDetail.toggle() }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: check.map { $0.passed == $0.total } ?? true ? "checkmark.seal.fill" : "gearshape.2")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(check.map { $0.passed == $0.total } ?? true ? BaziTheme.shenshaGood : BaziTheme.secondary)
+                                    Text(check.map { $0.summary } ?? "引擎校验中…")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(BaziTheme.secondary)
+                                    Spacer()
+                                    Image(systemName: showCheckDetail ? "chevron.up" : "chevron.down")
+                                        .font(.system(size: 12)).foregroundStyle(BaziTheme.placeholder)
+                                }
                             }
-                            if let check {
-                                let rows = Self.selfCheckRows(check)
-                                ForEach(rows.indices, id: \.self) { i in
-                                    let item = rows[i]
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                            .font(.system(size: 13))
-                                            .foregroundStyle(item.ok ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
-                                            .padding(.top, 1)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text(item.name).font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
-                                            Text(item.detail).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                            .buttonStyle(.plain)
+
+                            if showCheckDetail {
+                                if let check {
+                                    let rows = Self.selfCheckRows(check)
+                                    ForEach(rows.indices, id: \.self) { i in
+                                        let item = rows[i]
+                                        HStack(alignment: .top, spacing: 8) {
+                                            Image(systemName: item.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(item.ok ? BaziTheme.shenshaGood : BaziTheme.shenshaBad)
+                                                .padding(.top, 1)
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(item.name).font(.system(size: 13)).foregroundStyle(BaziTheme.ink)
+                                                Text(item.detail).font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                                            }
                                         }
                                     }
+                                    Text("四柱 / 大运 / 命宫身宫 / 农历换算均与权威历法（lunar-python）逐例对拍，全部通过即排盘引擎可验证一致。")
+                                        .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
+                                } else {
+                                    Text("正在后台逐例校验 490 例锚点，完成后自动刷新…")
+                                        .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
+                                        .padding(.vertical, 6)
                                 }
-                            } else {
-                                Text("正在后台逐例校验 490 例锚点，完成后自动刷新…")
-                                    .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
-                                    .padding(.vertical, 10)
-                            }
-                            if let check {
-                                Text("锚点+对拍基线（lunar-python 权威口径 \(check.total) 例：历法事实锚点 / 立春节气交界 / 晚子时 / 极端经度），全部通过即与权威引擎四柱一致。")
-                                    .font(.system(size: 11)).foregroundStyle(BaziTheme.tertiary)
                             }
                         }
-                        .padding(16)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                         .baziCard()
                         .padding(.horizontal, 20)
                         .id("selfcheck")
@@ -208,6 +225,9 @@ struct ProfileView: View {
                                 Text("每日指南提醒").font(BaziTheme.body()).foregroundStyle(BaziTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $notifyDaily).labelsHidden().tint(BaziTheme.actionBlue)
+                                    .onChange(of: notifyDaily) { _, on in
+                                        DailyReminder.setEnabled(on)
+                                    }
                             }
                             .frame(height: 48)
                             Rectangle().fill(BaziTheme.divider).frame(height: 1)
@@ -216,6 +236,22 @@ struct ProfileView: View {
                             settingRow("隐私政策", icon: "hand.raised") { showPrivacy = true }
                             Rectangle().fill(BaziTheme.divider).frame(height: 1)
                             settingRow("关于", icon: "info.circle") { showAbout = true }
+                            Rectangle().fill(BaziTheme.divider).frame(height: 1)
+                            Button {
+                                if let url = URL(string: "itms-apps://itunes.apple.com/app/id6807237754?action=write-review") {
+                                    openURL(url)
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "star").font(.system(size: 16)).foregroundStyle(BaziTheme.secondary).frame(width: 24)
+                                    Text("去 App Store 评分").font(BaziTheme.body()).foregroundStyle(BaziTheme.ink)
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(BaziTheme.placeholder)
+                                }
+                                .frame(height: 48)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             Rectangle().fill(BaziTheme.divider).frame(height: 1)
                             Button { showClearDialog = true } label: {
                                 HStack {

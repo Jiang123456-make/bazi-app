@@ -62,7 +62,7 @@ struct PaipanView: View {
                             .clipShape(Capsule())
                     }
                     Button(action: { loadDemo() }) {
-                        Text(hepanMode ? "试排示例（双方 demo 数据）" : "试排示例（用 demo 数据）")
+                        Text(hepanMode ? "试排示例（一键填入双方）" : "试排示例（一键填入）")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(BaziTheme.goldDeep)
                             .padding(.vertical, 6)
@@ -338,6 +338,7 @@ struct PaipanView: View {
             ganzhi: c.pillars.map(\.ganzhi).joined(separator: " ")
         ))
         chart = c
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         showResult = true
     }
 
