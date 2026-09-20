@@ -72,7 +72,16 @@ final class SmokeTests: XCTestCase {
         let passed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '490'")).firstMatch
         _ = passed.waitForExistence(timeout: 120)
         shot(app, "08-我的-自检结果")
-        XCTAssertTrue(passed.exists, "自检卡应出现 490/490（后台异步校验完成）")
+        // 严格断言 490/490；未满分则把失败明细打印到日志（「期望 …，实际 …」行）
+        let perfect = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '490/490'")).firstMatch
+        if !perfect.waitForExistence(timeout: 10) {
+            let fails = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '，实际'"))
+            let n = min(fails.count, 12)
+            for i in 0..<n {
+                print("SELFCHECK-FAIL[\(i)]:", fails.element(boundBy: i).label)
+            }
+        }
+        XCTAssertTrue(perfect.exists, "自检卡应出现 490/490（后台异步校验完成）")
 
         // ⑦ 词典入口打开
         let glossary = app.buttons.matching(NSPredicate(format: "label CONTAINS '术语词典'")).firstMatch
