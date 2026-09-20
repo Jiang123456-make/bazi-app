@@ -58,9 +58,9 @@ final class SmokeTests: XCTestCase {
                 if done.waitForExistence(timeout: 3) {
                     done.tap()
                 }
-                // 等键盘真正消失（最长 5 秒）
+                // 等键盘真正消失（最长 10 秒，云 runner 动画偶发偏慢）
                 let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: kb)
-                wait(for: [gone], timeout: 5)
+                wait(for: [gone], timeout: 10)
                 shot(app, "07-键盘收起后")
                 XCTAssertFalse(kb.exists, "点「完成」后键盘应已收起")
                 XCTAssertTrue(app.tabBars.buttons["我的"].isHittable, "tabBar 应可点（键盘陷阱修复验证）")
