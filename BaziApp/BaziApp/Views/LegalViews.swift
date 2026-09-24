@@ -53,6 +53,8 @@ struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
     /// ICP 备案号：备案通过后填入即自动展示（不必再改布局）
     private static let icpNumber: String? = nil
+    /// 自检结果进程级缓存：490 例全量排盘较重，同一进程只算一次
+    private static var cachedCheck: BaziSelfCheck.Result?
 
     @State private var devTaps = 0
     @State private var showDevInfo = false
@@ -79,7 +81,7 @@ struct AboutSheet: View {
                     Text("灵犀命理")
                         .font(.system(size: 20, weight: .semibold, design: .serif))
                         .foregroundStyle(BaziTheme.ink)
-                    Text("本机排盘 · 数据不出设备")
+                    Text("本机排盘 · 隐私优先")
                         .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
                 }
 
@@ -99,9 +101,14 @@ struct AboutSheet: View {
             }
             .onAppear {
                 if check == nil {
-                    Task.detached(priority: .utility) {
-                        let result = BaziSelfCheck.run()
-                        await MainActor.run { self.check = result }
+                    if let cached = Self.cachedCheck {
+                        check = cached
+                    } else {
+                        Task.detached(priority: .utility) {
+                            let result = BaziSelfCheck.run()
+                            Self.cachedCheck = result
+                            await MainActor.run { self.check = result }
+                        }
                     }
                 }
             }

@@ -7,9 +7,22 @@
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
-	<!-- 收集的数据类型：本 App 为离线排盘，不收集、不追踪任何用户数据 -->
+	<!-- 收集的数据类型：排盘/问答内容经用户主动触发发送至大模型服务（App 功能所需），不用于追踪 -->
 	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
 	<!-- 访问的 API 及原因（本 App 未使用需申报的系统 API） -->
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array/>

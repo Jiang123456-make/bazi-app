@@ -51,7 +51,8 @@ struct AiService {
         let shensha = (c.goodShenSha + c.badShenSha).joined(separator: "、")
         let liunian = c.liunian.prefix(3).map { "\($0.year)\($0.ganzhi)(\($0.shiShen))" }.joined(separator: " ")
         var lines = [
-            "姓名：\(c.name)（\(c.gender)）",
+            // 隐私口径：不含姓名（与隐私政策声明一致），性别保留——男命/女命大运顺逆与十神取象不同
+            "性别：\(c.gender)",
             "八字四柱：\(pillars)",
             "日主：\(c.dayMaster)，\(c.strength)，\(c.pattern)",
             "旺衰三判：得令\(c.deLing ? "是" : "否")、得地\(c.deDi ? "是" : "否")、得势\(c.deShi ? "是" : "否")；\(c.strengthNote)",
@@ -90,8 +91,13 @@ struct AiService {
 
     // MARK: - 请求
 
-    /// 发送对话请求，回调返回模型回复文本（主线程回调）
+    /// 发送对话请求，回调返回模型回复文本（主线程回调）。
+    /// 超时 60s；网络类失败自动重试 1 次（指数退避 2s），减少偶发抖动直接落到本地兜底的概率。
     static func chat(messages: [ChatMessage], completion: @escaping (Result<String, AiError>) -> Void) {
+        attempt(messages: messages, attemptIndex: 0, completion: completion)
+    }
+
+    private static func attempt(messages: [ChatMessage], attemptIndex: Int, completion: @escaping (Result<String, AiError>) -> Void) {
         guard let url = URL(string: proxyURL + "/v1/chat") else {
             completion(.failure(.invalidURL))
             return
@@ -102,37 +108,46 @@ struct AiService {
         if !appToken.isEmpty {
             req.setValue(appToken, forHTTPHeaderField: "X-App-Token")
         }
-        req.timeoutInterval = 30
+        req.timeoutInterval = 60
         req.httpBody = try? JSONEncoder().encode(ChatRequest(model: model, messages: messages))
 
         URLSession.shared.dataTask(with: req) { data, resp, err in
             DispatchQueue.main.async {
+                let result: Result<String, AiError>
                 if let err = err {
-                    completion(.failure(friendlyError(err)))
-                    return
-                }
-                guard let http = resp as? HTTPURLResponse else {
-                    completion(.failure(.network))
-                    return
-                }
-                guard http.statusCode == 200, let data = data else {
-                    completion(.failure(httpError(status: http.statusCode, data: data)))
-                    return
-                }
-                do {
-                    let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
-                    let text = decoded.choices.first?.message.content
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let text, !text.isEmpty {
-                        completion(.success(text))
-                    } else {
-                        completion(.failure(.empty))
+                    result = .failure(friendlyError(err))
+                } else if let http = resp as? HTTPURLResponse, http.statusCode == 200, let data = data {
+                    do {
+                        let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
+                        let text = decoded.choices.first?.message.content
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        result = (text?.isEmpty == false) ? .success(text!) : .failure(.empty)
+                    } catch {
+                        result = .failure(.parse)
                     }
-                } catch {
-                    completion(.failure(.parse))
+                } else if let http = resp as? HTTPURLResponse {
+                    result = .failure(httpError(status: http.statusCode, data: data))
+                } else {
+                    result = .failure(.network)
                 }
+                // 网络类失败（超时/断连/网关抖动）且还有重试额度：2s 后重试一次；4xx 业务错误不重试
+                if case .failure(let e) = result, attemptIndex < 1, shouldRetry(e) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        attempt(messages: messages, attemptIndex: attemptIndex + 1, completion: completion)
+                    }
+                    return
+                }
+                completion(result)
             }
         }.resume()
+    }
+
+    private static func shouldRetry(_ e: AiError) -> Bool {
+        switch e {
+        case .network, .empty, .parse: return true
+        case .status(let code, _): return code == 429 || code == 502 || code == 504
+        default: return false
+        }
     }
 
     // MARK: - 错误

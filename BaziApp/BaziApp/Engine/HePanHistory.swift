@@ -12,6 +12,8 @@ struct HePanEntry: Codable, Identifiable {
     var dayRelation: String
     var score: Int
     var time = Date()
+    /// 完整合盘结果（回看用；旧版本记录无此字段，解码为 nil）
+    var detail: HePanResult? = nil
 }
 
 /// 合盘记录持久化（UserDefaults，最多 8 条，按时间倒序）

@@ -14,11 +14,18 @@ struct ChartView: View {
     private var dayGan: String { String(chart.dayMaster.first ?? "甲") }
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
 
-    /// 页签（锚点滚动）：第四页签用「经典论述」替代设计板的 AI 解读（AI 卡在报告页）
-    private let tabs: [(String, String)] = [
-        ("基本信息", "sec-basic"), ("基本排盘", "sec-mingpan"),
-        ("大运流年", "sec-dayun"), ("经典论述", "sec-quote")
-    ]
+    /// 页签（锚点滚动）：第四页签用「经典论述」替代设计板的 AI 解读（AI 卡在报告页）；
+    /// 滴天髓引文缺失的日干不渲染 quoteCard，页签同步隐藏，避免死锚点
+    private var tabs: [(String, String)] {
+        var list: [(String, String)] = [
+            ("基本信息", "sec-basic"), ("基本排盘", "sec-mingpan"),
+            ("大运流年", "sec-dayun")
+        ]
+        if !DiTianSui.quote(dayGan: dayGan).isEmpty {
+            list.append(("经典论述", "sec-quote"))
+        }
+        return list
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -54,6 +61,9 @@ struct ChartView: View {
         .toolbarBackground(BaziTheme.canvas, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        .sheet(item: $term) { t in
+            GlossarySheet(term: t)
+        }
     }
 
     // MARK: - 头部（问真式：黑色通栏 + 金页签 + 金圈头像信息条 + 金 chips）

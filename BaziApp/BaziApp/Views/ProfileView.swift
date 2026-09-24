@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 屏 5：我的（v5.1：功能入口全部接通 + 设置真实化 + 命盘摘要/历史/合盘/自检保留）
 struct ProfileView: View {
-    let chart: BaziChart?
+    @Binding var chart: BaziChart?
     @Environment(\.openURL) private var openURL
 
     // MARK: - 状态（此前缺失声明导致编译失败的三个补齐）
@@ -48,7 +48,7 @@ struct ProfileView: View {
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("灵犀命理").font(.system(size: 16, weight: .semibold)).foregroundStyle(BaziTheme.ink)
-                                Text("本机排盘 · 数据不出设备").font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
+                                Text("本机排盘 · 隐私优先").font(.system(size: 11)).foregroundStyle(BaziTheme.secondary)
                             }
                             Spacer()
                         }
@@ -124,9 +124,10 @@ struct ProfileView: View {
                                 withAnimation { showCheckDetail.toggle() }
                             } label: {
                                 HStack(spacing: 8) {
-                                    Image(systemName: check.map { $0.passed == $0.total } ?? true ? "checkmark.seal.fill" : "gearshape.2")
+                                    // 校验未完成时用中性图标，不抢「通过」的绿色语义
+                                    Image(systemName: check == nil ? "gearshape.2" : (check!.passed == check!.total ? "checkmark.seal.fill" : "gearshape.2"))
                                         .font(.system(size: 14))
-                                        .foregroundStyle(check.map { $0.passed == $0.total } ?? true ? BaziTheme.shenshaGood : BaziTheme.secondary)
+                                        .foregroundStyle(check.map { $0.passed == $0.total } == true ? BaziTheme.shenshaGood : BaziTheme.secondary)
                                     Text(check.map { $0.summary } ?? "引擎校验中…")
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(BaziTheme.secondary)
@@ -197,18 +198,7 @@ struct ProfileView: View {
                             } else {
                                 ForEach(Array(hpList.prefix(5).enumerated()), id: \.element.id) { i, e in
                                     if i > 0 { Rectangle().fill(BaziTheme.divider).frame(height: 1) }
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("\(e.aName) × \(e.bName)")
-                                                .font(.system(size: 15)).foregroundStyle(BaziTheme.ink)
-                                            Text("\(e.zodiacRelation) · \(e.dayRelation) · \(e.score) 分")
-                                                .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
-                                        }
-                                        Spacer()
-                                        Text(timeText(e.time))
-                                            .font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
-                                    }
-                                    .frame(height: 52)
+                                    hepanRow(e)
                                 }
                             }
                         }
@@ -362,6 +352,34 @@ struct ProfileView: View {
             Text(time).font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
         }
         .frame(height: 48)
+    }
+
+    /// 合盘记录行：有完整存档（detail）时可点开回看完整结果
+    private func hepanRow(_ e: HePanEntry) -> some View {
+        let label = HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(e.aName) × \(e.bName)")
+                    .font(.system(size: 15)).foregroundStyle(BaziTheme.ink)
+                Text("\(e.zodiacRelation) · \(e.dayRelation) · \(e.score) 分")
+                    .font(.system(size: 12)).foregroundStyle(BaziTheme.secondary)
+            }
+            Spacer()
+            if e.detail != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12)).foregroundStyle(BaziTheme.placeholder)
+            }
+            Text(timeText(e.time))
+                .font(.system(size: 13)).foregroundStyle(BaziTheme.secondary)
+        }
+        .frame(height: 52)
+        .contentShape(Rectangle())
+
+        if let detail = e.detail {
+            NavigationLink(destination: HePanView(result: detail)) { label }
+                .buttonStyle(.plain)
+        } else {
+            label   // 旧版本记录只有摘要，无完整结果可回看
+        }
     }
 
     private func timeText(_ date: Date) -> String {

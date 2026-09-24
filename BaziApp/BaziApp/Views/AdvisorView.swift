@@ -12,6 +12,7 @@ struct AdvisorView: View {
     @State private var style: AdvisorMemory.Style = AdvisorMemory.style
     @State private var dislikeFor: Message.ID?
     @State private var showDislikeDialog = false
+    @State private var activeKey = ""   // 当前命盘的记忆 key：AI 回包判活，防旧盘回包写入新盘记忆
     @FocusState private var inputFocused: Bool
 
     /// 欢迎卡话题入口（标签 + 实际发送的问题）
@@ -81,7 +82,14 @@ struct AdvisorView: View {
                 .padding(.vertical, 8)
             }
             .background(BaziTheme.canvas)
-            .onAppear { loadContent() }
+            .onAppear {
+                activeKey = AdvisorMemory.chartKey(chart)
+                loadContent()
+            }
+            .onChange(of: chart) { newChart in
+                // 命盘切换：更新判活 key，历史会话留给新一次进入时加载
+                activeKey = AdvisorMemory.chartKey(newChart)
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -505,12 +513,22 @@ struct AdvisorView: View {
 
         var chatMessages: [AiService.ChatMessage] = []
         chatMessages.append(AiService.ChatMessage(role: "system", content: systemContent))
-        for m in messages where !m.isWelcome {
+        // 只回放最近 6 轮（12 条）：全量重放会让 prompt 无上限膨胀，长会话触发截断与跑题；
+        // 更早的上下文由 memorySummary（最近问题 + 偏好）以摘要形式承担
+        let convo = messages.filter { !$0.isWelcome }
+        var recent = Array(convo.suffix(12))
+        if recent.first?.isAI == true { recent.removeFirst() }   // 保持 user/assistant 交替
+        for m in recent {
             chatMessages.append(AiService.ChatMessage(role: m.isAI ? "assistant" : "user", content: m.text))
         }
 
         let userText = last.text
         AiService.chat(messages: chatMessages) { result in
+            // 回包判活：请求期间命盘已切换则丢弃，防止旧盘回答写入新盘记忆
+            guard AdvisorMemory.chartKey(chart) == activeKey else {
+                isTyping = false
+                return
+            }
             isTyping = false
             var m: Message
             var failed = false

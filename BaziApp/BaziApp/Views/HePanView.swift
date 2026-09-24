@@ -46,7 +46,8 @@ struct HePanView: View {
             bGanzhi: result.b.pillars.map(\.ganzhi).joined(separator: " "),
             zodiacRelation: result.zodiacRelation,
             dayRelation: result.dayRelation,
-            score: result.score))
+            score: result.score,
+            detail: result))
         saved = true
     }
 

@@ -20,6 +20,16 @@ enum DailyReminder {
         }
     }
 
+    /// 启动时按存储偏好补调度。@AppStorage 默认值为 true 但 onChange 只在拨动开关时触发，
+    /// 导致「从未关过开关的用户」通知永不注册——启动时主动对齐一次（首次会弹授权，属预期）。
+    static func applyStartupPreference() {
+        let key = "settings.notifyDaily"
+        let enabled = UserDefaults.standard.object(forKey: key) == nil
+            ? true   // 与 @AppStorage 默认值 true 保持一致
+            : UserDefaults.standard.bool(forKey: key)
+        setEnabled(enabled)
+    }
+
     private static func schedule() {
         let content = UNMutableNotificationContent()
         content.title = "灵犀 · 今日指南"

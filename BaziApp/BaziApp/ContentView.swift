@@ -23,13 +23,20 @@ struct ContentView: View {
                 .tabItem { Label("顾问", systemImage: "bubble.left.and.bubble.right") }
                 .tag(2)
 
-            ProfileView(chart: chart)
+            ProfileView(chart: $chart)
                 .tabItem { Label("我的", systemImage: "person") }
                 .tag(3)
         }
         .tint(BaziTheme.actionBlue)
         .onReceive(NotificationCenter.default.publisher(for: Self.goPaipanNotification)) { _ in
             selection = 0
+        }
+        .onAppear {
+            if !showOnboarding { DailyReminder.applyStartupPreference() }
+        }
+        .onChange(of: showOnboarding) { newValue in
+            // 引导结束时（首次安装完成引导）也按偏好对齐一次每日提醒
+            if !newValue { DailyReminder.applyStartupPreference() }
         }
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingView { showOnboarding = false }
