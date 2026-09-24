@@ -41,8 +41,9 @@ struct ReportView: View {
             }
             .background(BaziTheme.canvas)
             .task(id: chart?.solarDate ?? "") {
+                loadGeneration += 1
                 aiText = nil
-                if let c = chart { loadAI(c) }
+                if let c = chart { loadAI(c, generation: loadGeneration) }
             }
         }
     }
@@ -125,7 +126,7 @@ struct ReportView: View {
                 if aiLoading {
                     ProgressView().tint(BaziTheme.actionBlue)
                 } else if let _ = aiText {
-                    Button { loadAI(c) } label: {
+                    Button { loadAI(c, generation: loadGeneration) } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.clockwise").font(.system(size: 11))
                             Text("重新生成").font(.system(size: 12, weight: .medium))
@@ -175,7 +176,7 @@ struct ReportView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Button {
                     aiFailed = false
-                    loadAI(c)
+                    loadAI(c, generation: loadGeneration)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: aiFailed ? "wifi.exclamationmark" : "sparkles")

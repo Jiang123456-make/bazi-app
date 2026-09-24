@@ -374,12 +374,12 @@ struct ProfileView: View {
         .frame(height: 52)
         .contentShape(Rectangle())
 
+        // 旧版本记录没有完整存档，仅展示摘要
         if let detail = e.detail {
-            NavigationLink(destination: HePanView(result: detail)) { label }
-                .buttonStyle(.plain)
-        } else {
-            label   // 旧版本记录只有摘要，无完整结果可回看
+            return AnyView(NavigationLink(destination: HePanView(result: detail)) { label }
+                .buttonStyle(.plain))
         }
+        return AnyView(label)
     }
 
     private func timeText(_ date: Date) -> String {
