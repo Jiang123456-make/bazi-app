@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 根视图：4 个 Tab（排盘 / 报告 / 顾问 / 我的）+ 首次启动引导
+/// 根视图：4 个 Tab（顾问 / 排盘 / 报告 / 我的）+ 首次启动引导
+/// v1.1 差异化：AI 顾问升为第一屏（4.3(b) 应对——产品主轴 = 会记忆的 AI 命理顾问）
 struct ContentView: View {
     @State private var selection = 0
     @State private var chart: BaziChart? = nil
@@ -11,16 +12,16 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selection) {
+            AdvisorView(chart: chart)
+                .tabItem { Label("顾问", systemImage: "bubble.left.and.bubble.right") }
+                .tag(0)
+
             PaipanView(chart: $chart)
                 .tabItem { Label("排盘", systemImage: "scope") }
-                .tag(0)
+                .tag(1)
 
             ReportView(chart: chart)
                 .tabItem { Label("报告", systemImage: "doc.text") }
-                .tag(1)
-
-            AdvisorView(chart: chart)
-                .tabItem { Label("顾问", systemImage: "bubble.left.and.bubble.right") }
                 .tag(2)
 
             ProfileView(chart: $chart)
@@ -29,7 +30,7 @@ struct ContentView: View {
         }
         .tint(BaziTheme.actionBlue)
         .onReceive(NotificationCenter.default.publisher(for: Self.goPaipanNotification)) { _ in
-            selection = 0
+            selection = 1
         }
         .onAppear {
             if !showOnboarding { DailyReminder.applyStartupPreference() }

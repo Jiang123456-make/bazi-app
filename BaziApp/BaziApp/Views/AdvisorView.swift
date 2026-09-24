@@ -328,17 +328,35 @@ struct AdvisorView: View {
             Text(msg.text)
                 .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
                 .lineSpacing(4)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
-                ForEach(topics, id: \.label) { t in
-                    Button(action: { ask(t.question) }) {
-                        Text(t.label)
-                            .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(BaziTheme.canvas)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(BaziTheme.hairline, lineWidth: 1))
+            if chart == nil {
+                // 无盘引导：AI 顾问是产品主轴，第一屏就把用户带去创建可验证命盘
+                Button {
+                    NotificationCenter.default.post(name: ContentView.goPaipanNotification, object: nil)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope")
+                        Text("创建我的命盘 · 可验证排盘")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(BaziTheme.actionBlue)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
+                    ForEach(topics, id: \.label) { t in
+                        Button(action: { ask(t.question) }) {
+                            Text(t.label)
+                                .font(.system(size: 14)).foregroundStyle(BaziTheme.ink)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(BaziTheme.canvas)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(BaziTheme.hairline, lineWidth: 1))
+                        }
                     }
                 }
             }
@@ -440,10 +458,13 @@ struct AdvisorView: View {
         guard messages.isEmpty else { return }
         let key = AdvisorMemory.chartKey(chart)
         let hist = AdvisorMemory.history(forKey: key)
-        let dm = chart?.dayMaster ?? "庚金"
-        let pattern = chart?.pattern ?? "七杀格"
 
-        var intro = "您好，我是灵犀。已读取您的命盘（\(dm)日主 · \(pattern)），可以解读事业、财运、感情与健康——点击下方话题，或直接输入提问。"
+        var intro: String
+        if let c = chart {
+            intro = "您好，我是灵犀。已读取您的命盘（\(c.dayMaster)日主 · \(c.pattern)），可以解读事业、财运、感情与健康——点击下方话题，或直接输入提问。"
+        } else {
+            intro = "您好，我是灵犀，一位会记住你的 AI 命理顾问。\n还没有你的命盘：先去「排盘」创建一张（节气级精度 + 真太阳时透明换算），回来后我就能结合你的八字说话，而不是泛泛而谈。"
+        }
         if !hist.isEmpty {
             intro += "\n我们已聊过 \(hist.count) 次，接着上次继续。"
         }

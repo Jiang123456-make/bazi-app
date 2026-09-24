@@ -150,6 +150,8 @@ struct ChartView: View {
                 Text("真太阳时 \(chart.trueSolarTime)")
                     .font(.system(size: 12)).foregroundStyle(BaziTheme.tertiary)
             }
+            Text("排盘按真太阳时计算：钟表时间 + 经度时差 + 均时差（与通万年历逐项对拍验证）")
+                .font(.system(size: 11)).foregroundStyle(BaziTheme.placeholder)
 
             infoGrid([
                 ("公历", "\(chart.solarDate) \(chart.hour)"),
