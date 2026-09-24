@@ -3,6 +3,8 @@ import SwiftUI
 /// 屏 3：命理·报告（评分 + AI 解读 + 当前大运 + 四维度 + 10 年运势 + 今年宜忌，全部按命局动态生成）
 struct ReportView: View {
     let chart: BaziChart?
+    /// 请求代次：切换命盘后旧回包直接丢弃，防串盘（URLSession 回调不受 .task 取消约束）
+    @State private var loadGeneration = 0
 
     @State private var aiLoading = false
     @State private var aiText: String? = nil
